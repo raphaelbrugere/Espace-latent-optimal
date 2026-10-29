@@ -1,0 +1,49 @@
+{
+  "files.exclude": {
+    "**/.gitkeep": true,
+    "**/py.typed": true,
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ipynb_checkpoints": true,
+    "**/*.egg-info": true,
+    ".venv": true,
+    "wandb": true,
+    "lightning_logs": true
+  },
+  "files.watcherExclude": {
+    "**/.venv/**": true,
+    "**/outputs/**": true,
+    "**/multirun/**": true,
+    "**/wandb/**": true,
+    "**/lightning_logs/**": true,
+    "data/**": true,
+    "datasets/**": true
+  },
+  "search.exclude": {
+    "**/outputs": true,
+    "**/multirun": true,
+    "**/wandb": true,
+    "uv.lock": true
+  },
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "pyproject.toml": "uv.lock, .python-version, .pre-commit-config.yaml",
+    "README.md": "AUTHORS.md, CONTRIBUTING.md, INSTALL.md",
+    ".gitignore": ".gitattributes"
+  },
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
+  "python.testing.pytestEnabled": true,
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  }
+}

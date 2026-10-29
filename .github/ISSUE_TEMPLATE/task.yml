@@ -1,0 +1,32 @@
+name: Tâche
+description: Travail à faire (code, doc, infra)
+title: "[task] "
+labels: ["task"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+    validations:
+      required: true
+  - type: dropdown
+    id: workstream
+    attributes:
+      label: Workstream
+      options:
+        - A. Data et infra
+        - B. Backbones et SSL
+        - C. Heads et évaluation
+        - D. Embarqué
+        - Rapport / soutenance
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Critères de fin
+      description: Comment sait-on que c'est terminé ?
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: true

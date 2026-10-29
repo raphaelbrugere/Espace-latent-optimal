@@ -1,0 +1,40 @@
+name: Bug
+description: Quelque chose ne marche pas comme prévu
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Ce qui se passe, et ce qui devrait se passer.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Pour reproduire
+      description: Commande exacte et config utilisées.
+      render: bash
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environnement
+      options:
+        - local
+        - DCE (Slurm)
+        - CI
+    validations:
+      required: true
+  - type: input
+    id: git_sha
+    attributes:
+      label: Commit
+      description: Sortie de `git rev-parse --short HEAD`
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / traceback
+      render: text

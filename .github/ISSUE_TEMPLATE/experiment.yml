@@ -1,0 +1,71 @@
+name: Expérience
+description: Carte d'expérience, obligatoire avant tout gros run
+title: "[exp] "
+labels: ["experiment"]
+body:
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothèse
+      description: Ce qu'on cherche à vérifier et le résultat attendu.
+    validations:
+      required: true
+  - type: dropdown
+    id: workstream
+    attributes:
+      label: Workstream
+      options:
+        - A. Data et infra
+        - B. Backbones et SSL
+        - C. Heads et évaluation
+        - D. Embarqué
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Étape
+      options:
+        - pretrain (SSL)
+        - train (supervisé)
+        - eval
+        - export / bench
+    validations:
+      required: true
+  - type: input
+    id: config
+    attributes:
+      label: Config
+      description: Fichier dans configs/experiment/
+      placeholder: configs/experiment/vittiny_lejepa_in100.yaml
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Commande de lancement
+      placeholder: python tools/pretrain.py experiment=vittiny_lejepa_in100 cluster=dce -m
+  - type: input
+    id: budget
+    attributes:
+      label: Budget de calcul estimé
+      placeholder: 4 GPU × 24 h
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Avant de lancer
+      options:
+        - label: Smoke test passé (experiment=smoke)
+          required: true
+        - label: Config commitée sur main (arbre git propre)
+          required: true
+  - type: input
+    id: wandb
+    attributes:
+      label: Lien W&B
+      description: À compléter une fois le run lancé.
+  - type: textarea
+    id: conclusion
+    attributes:
+      label: Résultats et conclusion
+      description: À compléter à la fin. L'hypothèse est-elle validée ?
