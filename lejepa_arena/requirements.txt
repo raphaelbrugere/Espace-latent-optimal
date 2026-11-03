@@ -1,0 +1,4 @@
+torch>=2.3
+torchvision>=0.18  # includes datasets.Imagenette
+timm>=1.0      # forward_intermediates, dynamic_img_size
+datasets       # Galaxy10 from the Hugging Face Hub
