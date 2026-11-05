@@ -1,0 +1,52 @@
+# Config de premier niveau de tools/train.py : une tête sur un backbone gelé.
+#
+#   python tools/train.py backbone=from_run backbone.run=results/pretrain/<exp>/<date> task=pets_seg
+#   python tools/train.py backbone=vit_s8_dino task=imagenette_cls head=linear
+#   python tools/train.py backbone=from_run backbone.run=<run> \
+#       task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det -m  # les 5 tâches
+# (-m après tous les overrides, ou avant tous : pas au milieu)
+#
+# head et epochs absents : recette de la baseline (evaluation/tasks.py).
+# Chaque run écrit dans results/train/<experiment_name>/<task>/<date>/ : head.pt, results.json.
+defaults:
+  - backbone: ??? # obligatoire : from_run, vit_s8_dino…
+  - head: null # null : tête par défaut de la tâche
+  - cluster: local
+  - _self_
+  - optional experiment: null
+
+task: ??? # nom d'une tâche du registre (evaluation/tasks.py)
+experiment_name: default
+seed: 0 # graine de la tête (init, ordre des données), enregistrée dans head.pt
+resume: null
+allow_dirty: false
+
+# Features du backbone extraites une fois dans data/features/ (clé : empreinte du backbone),
+# puis tête entraînée dessus. false : backbone appliqué à la volée à chaque epoch.
+cache_features: true
+
+# Recette de la baseline (train_head.py de l'arène)
+epochs: null # null : epochs par défaut de la tâche
+max_steps_per_epoch: null
+batch_size: 64
+precision: fp16 # fp16 | bf16 | fp32 (voir method/lejepa.yaml)
+optimizer:
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+
+trainer:
+  limit_val_batches: null
+  log_every_n_steps: 50
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: ${cluster.results_root}/train/${experiment_name}/${task}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: ${cluster.results_root}/train/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${task}
+  job_logging:
+    handlers:
+      file:
+        filename: ${hydra.runtime.output_dir}/run.log

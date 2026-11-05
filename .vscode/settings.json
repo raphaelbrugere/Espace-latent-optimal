@@ -19,12 +19,14 @@
     "**/wandb/**": true,
     "**/lightning_logs/**": true,
     "data/**": true,
-    "datasets/**": true
+    "results/**": true
   },
   "search.exclude": {
     "**/outputs": true,
     "**/multirun": true,
     "**/wandb": true,
+    "data": true,
+    "results": true,
     "uv.lock": true
   },
   "explorer.fileNesting.enabled": true,

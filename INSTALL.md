@@ -77,4 +77,11 @@ Après chaque `git pull` qui modifie `uv.lock`, relancer `uv sync` pour mettre l
 
 Pour ajouter une dépendance : `uv add <paquet>` (ou `uv add --dev <paquet>` pour un outil de développement), puis commiter `pyproject.toml` et `uv.lock`.
 
-Pour le cluster DCE, voir [docs/CLUSTER.md](docs/CLUSTER.md).
+PyTorch : `uv sync` installe la version CPU sous Windows et la version CUDA 13 sous Linux (DCE). En local,
+un smoke run (`uv run python tools/pretrain.py experiment=smoke`) vérifie l'installation sans GPU.
+
+Données : rien n'est téléchargé à l'installation. `uv run python tools/prepare_data.py` les place dans `data/`
+(voir [docs/DATASETS.md](docs/DATASETS.md)).
+
+Pour le cluster DCE, voir [docs/CLUSTER.md](docs/CLUSTER.md), et [slurm/COMMANDS.md](slurm/COMMANDS.md) pour
+toutes les commandes du projet.

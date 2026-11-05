@@ -1,0 +1,10 @@
+# ViT-S/8 à poids aléatoires : baseline de la small league (exemple minimal LeJEPA).
+# 21,7M paramètres ; 4 cartes au stride 8 (pas de pyramide).
+_target_: latentopt.models.backbones.archs.vit.TimmViT
+
+arch: vit_small_patch8_224 # architecture timm
+img_size: ${oc.select:data.img_size,128} # pré-entraînement : celle des données ; 128 sinon (têtes)
+embed_dim: 512 # projection apprise après le pooling ; null = token CLS (384)
+blocks: [2, 5, 8, 11] # blocs exposés comme cartes de features (indices à partir de 0)
+drop_path_rate: 0.1
+grad_checkpointing: false # true : moins de mémoire GPU, ~30 % plus lent, même résultat

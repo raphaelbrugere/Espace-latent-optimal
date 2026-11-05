@@ -1,0 +1,7 @@
+# Localisation mono-instance par soft-argmax : détection.
+# Fournis à l'exécution : feature_info (backbone), num_classes (tâche).
+_target_: latentopt.models.heads.SoftArgmaxHead
+_partial_: true
+
+channels: 128 # largeur du tronc convolutif
+target_stride: 8 # la tête lit la carte dont le stride est le plus proche

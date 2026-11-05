@@ -1,0 +1,9 @@
+# @package _global_
+# GitHub Actions : CPU, pas de worker (runner à 2 cœurs), données synthétiques uniquement.
+cluster:
+  name: ci
+  data_root: ${project_root:}/data
+  results_root: ${project_root:}/results
+  num_workers: 0
+  device: cpu
+  progress_bar: false

@@ -1,0 +1,19 @@
+# @package _global_
+# Reproduction de la baseline de projects/lejepa_arena : ViT-S/8, LeJEPA, Imagenette 128px,
+# 800 epochs. Référence de toutes les autres expériences.
+# Seul écart voulu avec le code de l'arène : aucun (bf16 comme l'arène).
+#
+# Prérequis : python tools/prepare_data.py imagenette --freeze-splits
+#   python tools/pretrain.py experiment=vit_lejepa_imagenette cluster=dce -m
+#
+# bf16 : gpu_prod_long ne sert que des nœuds sh (RTX 3080, bf16 matériel), voir docs/CLUSTER.md.
+# Si le job s'arrête en manque de mémoire GPU (10 Go) : backbone.grad_checkpointing=true,
+# qui ne change pas le résultat.
+defaults:
+  - override /backbone: vit_s8
+  - override /data: imagenette
+
+experiment_name: vit_lejepa_imagenette
+
+method:
+  precision: bf16

@@ -1,0 +1,36 @@
+# Config de premier niveau de tools/pretrain.py : pré-entraînement d'un backbone.
+#
+#   python tools/pretrain.py backbone=vit_s8                        # local
+#   python tools/pretrain.py experiment=smoke                       # smoke run
+#   python tools/pretrain.py experiment=<nom> cluster=dce -m        # job Slurm (-m obligatoire)
+#
+# Chaque run écrit dans results/pretrain/<experiment_name>/<date>/ : config, run.log, métriques.
+defaults:
+  - backbone: ??? # obligatoire : aucun backbone par défaut
+  - method: lejepa
+  - data: imagenette
+  - cluster: local
+  - _self_
+  - optional experiment: null # experiment=<nom> : configs/experiment/<nom>.yaml
+
+experiment_name: default # chaque fichier de configs/experiment/ le redéfinit
+seed: 0
+resume: null # chemin d'un last.ckpt pour reprendre un run interrompu
+allow_dirty: false # true : autorise un job long sur le DCE avec un arbre git non commité
+
+trainer: # réglages du Trainer sans effet sur le résultat de l'entraînement
+  limit_val_batches: null # entier : sonde évaluée sur une partie du val (smoke run)
+  log_every_n_steps: 50
+
+hydra:
+  job:
+    chdir: false # le code tourne depuis le dossier de lancement
+  run:
+    dir: ${cluster.results_root}/pretrain/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: ${cluster.results_root}/pretrain/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${hydra.job.num}
+  job_logging:
+    handlers:
+      file:
+        filename: ${hydra.runtime.output_dir}/run.log

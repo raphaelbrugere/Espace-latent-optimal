@@ -1,0 +1,6 @@
+# Linear probe sur `embed` : tâches de classification.
+# Fournis à l'exécution : embed_dim (backbone), num_classes (tâche).
+_target_: latentopt.models.heads.LinearProbe
+_partial_: true
+
+norm: true # LayerNorm avant la projection ; false = sonde linéaire stricte

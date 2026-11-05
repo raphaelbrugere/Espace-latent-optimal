@@ -1,0 +1,28 @@
+# @package _global_
+# DCE de CentraleSupélec (voir docs/CLUSTER.md). À lancer depuis la passerelle, avec -m :
+# sans -m, Hydra n'utilise pas le launcher et le run tournerait sur la passerelle.
+#
+#   python tools/pretrain.py experiment=<nom> cluster=dce -m
+#   python tools/pretrain.py experiment=smoke cluster=dce hydra.launcher.partition=gpu_inter hydra.launcher.timeout_min=120 -m
+defaults:
+  - override /hydra/launcher: submitit_slurm
+
+cluster:
+  name: dce
+  data_root: ${oc.env:DATA_ROOT,${project_root:}/data}
+  results_root: ${oc.env:OUTPUT_ROOT,${project_root:}/results}
+  num_workers: 6 # 8 cœurs par nœud : en laisser pour le processus principal
+  device: cuda
+  progress_bar: false # la barre de progression pollue les logs Slurm ; suivre run.log
+
+hydra:
+  launcher:
+    account: 3a_cs_ia_n40_safran
+    partition: gpu_prod_long # 2 jours max ; gpu_inter (2 h) pour un smoke run
+    timeout_min: 2880
+    nodes: 1
+    tasks_per_node: 1
+    gpus_per_node: 1 # un seul GPU par nœud
+    cpus_per_task: 8
+    mem_gb: 24 # nœuds à 30 Go de RAM ; à ajuster si un job reste en attente
+    constraint: null # "sh" pour forcer une RTX 3080 (bf16)

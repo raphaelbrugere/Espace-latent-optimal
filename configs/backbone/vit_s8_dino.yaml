@@ -1,0 +1,10 @@
+# ViT-S/8 avec les poids DINO (auto-supervisé sur ImageNet-1k) : référence externe, à
+# comparer à vit_s8 à architecture égale. Architecture et embed (token CLS, 384) fixés
+# par les poids, dans backbones/external/dino.py.
+# Prérequis : python tools/prepare_data.py dino_vits8
+_target_: latentopt.models.backbones.external.dino.dino_vits8
+
+img_size: 128 # poids pré-entraînés en 224px ; position embeddings rééchantillonnés
+blocks: [2, 5, 8, 11]
+drop_path_rate: 0.0
+grad_checkpointing: false

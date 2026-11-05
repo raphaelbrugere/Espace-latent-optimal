@@ -1,0 +1,33 @@
+# Config de premier niveau de tools/eval.py : score d'un backbone et de ses têtes.
+#
+#   python tools/eval.py name=lejepa_vits8 runs='[results/train/<exp>/<date>/imagenette_cls,...]'
+#   python tools/eval.py name=lejepa_vits8 runs=... split=test      # leaderboard : à la fin seulement
+#
+# Écrit results/eval/<name>/<split>/<date>/results.json (format de l'arène), lu par
+# reporting/leaderboard.py.
+defaults:
+  - cluster: local
+  - _self_
+
+name: ??? # nom affiché dans le leaderboard ("baseline" = référence des gains)
+runs: ??? # dossiers de runs de tools/train.py, une tête par tâche, même backbone
+split: val # val pendant le développement ; test seulement pour le leaderboard final
+cache_features: true # features du split en cache (data/features/), partagé avec train
+precision: fp16 # fp16 | bf16 | fp32
+batch_size: 64
+
+experiment_name: ${name}
+allow_dirty: true # une évaluation ne s'entraîne pas : pas de garde-fou git
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: ${cluster.results_root}/eval/${name}/${split}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: ${cluster.results_root}/eval/${name}/${split}/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${hydra.job.num}
+  job_logging:
+    handlers:
+      file:
+        filename: ${hydra.runtime.output_dir}/run.log

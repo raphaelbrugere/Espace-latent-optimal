@@ -1,0 +1,31 @@
+# LeJEPA : λ·SIGReg + (1-λ)·invariance sur les projections des V vues.
+# Valeurs de la baseline de projects/lejepa_arena (exemple minimal LeJEPA), sauf la précision.
+# Tout ce qui change le résultat est ici, jamais dans cluster/.
+name: lejepa
+
+model: # latentopt.methods.LeJEPA ; backbone fourni à l'exécution
+  _target_: latentopt.methods.LeJEPA
+  _partial_: true
+  proj_dim: 16 # dimension de sortie du projecteur (espace de SIGReg)
+  hidden_dim: 2048 # couches cachées du projecteur MLP
+  lamb: 0.02 # poids de SIGReg ; 1 - lamb pour l'invariance
+  num_probe_classes: ${data.num_probe_classes} # sonde en ligne, sur embeddings détachés
+
+num_views: 4 # vues augmentées par image
+epochs: 800
+batch_size: 128 # batch global, en images (x num_views passes dans le backbone)
+max_steps_per_epoch: null # entier pour raccourcir une epoch (smoke run)
+warmup_epochs: 1
+
+# fp16 par défaut : un job peut tomber sur une RTX 2080 Ti, sans bf16 matériel (docs/CLUSTER.md).
+# bf16 (comme l'arène) seulement sur un nœud sh : gpu_prod_long ou -C sh. fp32 en CPU.
+precision: fp16 # fp16 | bf16 | fp32
+
+optimizer: # latentopt.methods.build_optimizer ; modèle et nombre de steps fournis à l'exécution
+  _target_: latentopt.methods.build_optimizer
+  _partial_: true
+  lr: 2.0e-3
+  weight_decay: 5.0e-2
+  eta_min: 1.0e-3 # lr absolu en fin de cosinus, pas une fraction de lr
+  probe_lr: 1.0e-3
+  probe_weight_decay: 1.0e-7

@@ -1,0 +1,18 @@
+# @package _global_
+# Smoke run de tools/train.py : tête sur un ViT-S/8 à poids aléatoires, données synthétiques.
+#
+#   python tools/train.py experiment=smoke_train
+#   python tools/train.py experiment=smoke_train task=synthetic_cls,synthetic_seg,synthetic_det -m
+defaults:
+  - override /backbone: vit_s8
+
+experiment_name: smoke
+task: synthetic_cls
+epochs: 2
+max_steps_per_epoch: 3
+batch_size: 8
+precision: fp32 # CPU
+
+trainer:
+  limit_val_batches: 1
+  log_every_n_steps: 1

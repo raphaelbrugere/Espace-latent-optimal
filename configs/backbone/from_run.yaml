@@ -1,0 +1,7 @@
+# Backbone d'un de nos runs de pré-entraînement : architecture relue dans son config.yaml,
+# poids dans backbone.pt, vérifiés contre l'empreinte de results.json.
+#
+#   python tools/train.py backbone=from_run backbone.run=results/pretrain/<exp>/<date> task=pets_seg
+_target_: latentopt.models.backbones.checkpoint.from_run
+
+run: ??? # dossier du run (absolu, ou relatif à la racine du projet)

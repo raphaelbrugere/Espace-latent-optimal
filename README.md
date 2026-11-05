@@ -46,33 +46,47 @@ Espace-latent-optimal/
 ├── .gitattributes              # fins de ligne LF pour tout le monde
 │
 ├── src/latentopt/              # bibliothèque, identique en local et sur Slurm
-│   ├── data/                   # chargement des données
-│   │   └── datasets/           # un fichier par dataset
+│   ├── config.py               # resolvers Hydra (${project_root:})
+│   ├── run.py                  # dossier de run commun : config résolue, git, log, sauvegardes, garde-fous
+│   ├── data/                   # chargement des données (lecture seule, jamais de téléchargement)
+│   │   ├── datasets/           # un fichier par dataset (Imagenette, Flowers-102, Galaxy10, Pets, synthétiques)
+│   │   ├── splits/             # splits figés, un JSON par dataset (commités)
+│   │   ├── paths.py            # DATA_ROOT, FEATURES_ROOT, MODELS_ROOT
+│   │   └── transforms.py       # transforms du protocole d'évaluation
 │   ├── models/                 # composants des réseaux
+│   │   ├── contract.py         # contrat Backbone / Head : vérifications, empreinte des poids, save_head
 │   │   ├── backbones/          # extracteurs de features
-│   │   │   ├── archs/          # nos architectures (MobileNetV2, ConvNeXt)
-│   │   │   └── external/       # wrappers timm, hf, torch_hub
-│   │   ├── necks/              # passage features → vecteur (CLS, mean, concat ; plus tard FPN)
-│   │   └── heads/              # têtes downstream (linear, mlp ; plus tard det/seg)
-│   ├── methods/                # procédures d'entraînement Lightning (LeJEPA, supervisé)
-│   ├── losses/                 # fonctions de perte (SIGReg…)
-│   ├── evaluation/             # kNN, linear probe, few-shot, cache de features
-│   └── deploy/                 # export ONNX, quantization INT8
+│   │   │   ├── archs/          # architectures au contrat, poids aléatoires (ViT ; plus tard MobileNetV2, ConvNeXt)
+│   │   │   ├── external/       # poids externes (DINO…) : téléchargement et chargement dans une archi d'archs/
+│   │   │   └── checkpoint.py   # from_run : backbone d'un de nos runs de pré-entraînement
+│   │   ├── necks/              # passage features → vecteur (vide : embed est calculé par le backbone)
+│   │   └── heads/              # têtes downstream : LinearProbe, FPNHead (seg), SoftArgmaxHead (det)
+│   ├── methods/                # procédures d'entraînement Lightning : LeJEPA, tête sur backbone gelé
+│   ├── losses/                 # fonctions de perte : SIGReg, segmentation, détection
+│   ├── evaluation/             # tâches (registre, budgets), métriques, cache de features, évaluation
+│   └── deploy/                 # export ONNX, quantization INT8 (à venir)
 │
-├── tools/                      # points d'entrée : pretrain, train, eval, export, prepare_data
+├── tools/                      # points d'entrée : pretrain, train, eval, prepare_data
 ├── configs/                    # configs Hydra
-│   ├── cluster/                # seul dossier qui change entre CI, local et DCE
-│   ├── data/                   # choix du dataset
-│   ├── backbone/               # choix du backbone
-│   ├── neck/                   # choix du feature_mode
-│   ├── head/                   # choix de la tête
-│   ├── method/                 # LeJEPA, supervised (frozen | finetune | scratch)
-│   └── experiment/             # une config complète par expérience, dont smoke
+│   ├── pretrain.yaml, train.yaml, eval.yaml   # un fichier de premier niveau par point d'entrée
+│   ├── cluster/                # local, ci, dce : seul dossier qui change entre CI, local et DCE
+│   ├── data/                   # pool de pré-entraînement (imagenette, synthetic)
+│   ├── backbone/               # vit_s8, vit_s8_dino, from_run
+│   ├── neck/                   # choix du feature_mode (vide pour l'instant)
+│   ├── head/                   # linear, fpn, soft_argmax et leurs hyperparamètres
+│   ├── method/                 # lejepa
+│   └── experiment/             # une config complète par expérience, dont smoke et smoke_train
 │
-├── slurm/                      # jobs interactifs et sync W&B (le reste passe par submitit)
+├── slurm/                      # COMMANDS.md : toutes les commandes (local, smoke, DCE) ; jobs hors submitit
 ├── bench/                      # latence, mémoire, énergie sur la cible embarquée
-├── reporting/                  # leaderboard et figures pour le rapport
+├── reporting/                  # leaderboard.py, figures pour le rapport
 ├── projects/                   # exploration libre, hors du code principal
+│
+├── data/                       # DATA_ROOT : dossiers suivis par git (.gitkeep), contenu ignoré
+│   ├── datasets/               # sources téléchargées par tools/prepare_data.py
+│   ├── features/               # features mises en cache (FEATURES_ROOT)
+│   └── models/                 # poids externes téléchargés (MODELS_ROOT)
+├── results/                    # un dossier par run : config, log, métriques, checkpoints (ignoré)
 │
 ├── tests/                      # tests unitaires et smoke test
 │   ├── data/                   # tests des datasets et de l'anti-fuite
@@ -93,6 +107,31 @@ Espace-latent-optimal/
 ## Installation
 
 Voir [INSTALL.md](INSTALL.md) : installation de uv, création de l'environnement, activation de pre-commit et détail de ce qu'il fait.
+
+## Démarrage rapide
+
+Le pipeline : pré-entraîner un backbone, entraîner une tête par tâche sur ce backbone gelé, puis évaluer.
+Chaque run écrit un dossier complet dans `results/<étape>/<expérience>/<date>/` : config résolue, `run.log`,
+métriques, poids et `results.json`.
+
+```bash
+# vérifier le pipeline en ~1 min, sur CPU et données synthétiques
+uv run python tools/pretrain.py experiment=smoke
+uv run python tools/train.py experiment=smoke_train task=synthetic_cls,synthetic_seg,synthetic_det -m
+
+# vraies données (une fois)
+uv run python tools/prepare_data.py --freeze-splits
+
+# pré-entraînement, têtes, évaluation
+uv run python tools/pretrain.py experiment=vit_lejepa_imagenette cluster=dce -m
+uv run python tools/train.py backbone=from_run backbone.run=results/pretrain/<exp>/<date> \
+    task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det cluster=dce -m
+uv run python tools/eval.py name=<nom> runs='[results/train/<exp>/<date>/imagenette_cls,...]'
+uv run python reporting/leaderboard.py --split val
+```
+
+Toutes les commandes, avec leurs variantes et pièges : [slurm/COMMANDS.md](slurm/COMMANDS.md).
+Le DCE : [docs/CLUSTER.md](docs/CLUSTER.md). Les données : [docs/DATASETS.md](docs/DATASETS.md).
 
 ## Réglages VS Code (`.vscode/`)
 

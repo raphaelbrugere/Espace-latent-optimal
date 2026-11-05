@@ -1,0 +1,8 @@
+# Décodeur FPN top-down : segmentation.
+# Fournis à l'exécution : feature_info (backbone), num_classes (tâche).
+_target_: latentopt.models.heads.FPNHead
+_partial_: true
+
+channels: 64 # largeur commune après les projections latérales 1x1
+levels: null # cartes à fusionner, ex. [block9, block12] ; null = toutes
+upsample: nearest # mode d'interpolation top-down : nearest | bilinear

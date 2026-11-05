@@ -1,0 +1,23 @@
+# @package _global_
+# Smoke run : vérifie le pipeline de bout en bout en ~1 min (CPU), avant tout job long.
+# Données synthétiques, scores sans signification.
+#
+#   python tools/pretrain.py experiment=smoke
+#   python tools/pretrain.py experiment=smoke cluster=dce method.precision=fp16 \
+#       hydra.launcher.partition=gpu_inter hydra.launcher.timeout_min=30 -m
+defaults:
+  - override /backbone: vit_s8
+  - override /data: synthetic
+
+experiment_name: smoke
+
+method:
+  num_views: 2
+  epochs: 2
+  batch_size: 8
+  max_steps_per_epoch: 3
+  precision: fp32 # CPU ; fp16 sur GPU pour tester le GradScaler
+
+trainer:
+  limit_val_batches: 1
+  log_every_n_steps: 1

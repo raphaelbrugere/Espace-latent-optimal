@@ -1,0 +1,9 @@
+# @package _global_
+# Machine personnelle. Environnement uniquement : rien qui change le résultat d'un run.
+cluster:
+  name: local
+  data_root: ${oc.env:DATA_ROOT,${project_root:}/data}
+  results_root: ${oc.env:OUTPUT_ROOT,${project_root:}/results}
+  num_workers: 8
+  device: auto # cuda si disponible, sinon cpu
+  progress_bar: true
