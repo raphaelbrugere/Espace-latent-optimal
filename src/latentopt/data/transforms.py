@@ -24,6 +24,15 @@ def normalize(img: Image.Image) -> Tensor:
     )
 
 
+def check_hflip(hflip: float) -> float:
+    """`hflip` est une probabilité : True vaudrait 1 (toujours retourner), pas 0.5."""
+    if isinstance(hflip, bool) or not 0.0 <= hflip <= 1.0:
+        raise ValueError(
+            f"hflip est une probabilité dans [0, 1] (0.5 pour la baseline), reçu {hflip!r}"
+        )
+    return float(hflip)
+
+
 def mask_to_tensor(mask: Image.Image) -> Tensor:
     return torch.from_numpy(np.array(mask, dtype=np.int64))
 
@@ -57,7 +66,7 @@ class SegmentationTransform:
     """
 
     def __init__(self, size: int, native_mask: bool = True, hflip: float = 0.0):
-        self.size, self.native_mask, self.hflip = size, native_mask, hflip
+        self.size, self.native_mask, self.hflip = size, native_mask, check_hflip(hflip)
 
     def __call__(self, img: Image.Image, mask: Image.Image) -> tuple[Tensor, Tensor]:
         img = TF.resize(img, [self.size, self.size])
@@ -75,7 +84,7 @@ class DetectionTransform:
     boîtes alignées est invariante par scaling des axes : aucune correction à faire."""
 
     def __init__(self, size: int, hflip: float = 0.0):
-        self.size, self.hflip = size, hflip
+        self.size, self.hflip = size, check_hflip(hflip)
 
     def __call__(self, img: Image.Image, target: dict) -> tuple[Tensor, dict[str, Tensor]]:
         img = normalize(TF.resize(img, [self.size, self.size]))
