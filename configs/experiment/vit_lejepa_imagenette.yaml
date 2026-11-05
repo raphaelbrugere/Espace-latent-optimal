@@ -7,13 +7,17 @@
 #   python tools/pretrain.py experiment=vit_lejepa_imagenette cluster=dce -m
 #
 # bf16 : gpu_prod_long ne sert que des nœuds sh (RTX 3080, bf16 matériel), voir docs/CLUSTER.md.
-# Si le job s'arrête en manque de mémoire GPU (10 Go) : backbone.grad_checkpointing=true,
-# qui ne change pas le résultat.
+# grad_checkpointing : sans lui, manque de mémoire dès le premier pas sur une RTX 3080
+# (batch 128 × 4 vues, > 9,6 Go) ; avec, ~6,1 Go (mesuré sur sh00). Même résultat, plus lent.
+# Durée mesurée sur sh00 : ~1 min par epoch, soit ~13-14 h pour les 800 epochs.
 defaults:
   - override /backbone: vit_s8
   - override /data: imagenette
 
 experiment_name: vit_lejepa_imagenette
+
+backbone:
+  grad_checkpointing: true
 
 method:
   precision: bf16
