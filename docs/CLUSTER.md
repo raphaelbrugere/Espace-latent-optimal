@@ -72,11 +72,32 @@ La passerelle et les nœuds de calcul ont tous accès à Internet. On installe q
 git clone https://github.com/raphaelbrugere/Espace-latent-optimal.git
 cd Espace-latent-optimal
 uv sync
+uv run pre-commit install    # les commits faits depuis le DCE passent aussi par les hooks
 ```
 
-Si le dépôt est privé, il faut s'authentifier auprès de GitHub depuis le DCE : soit un token personnel, soit une clé SSH créée sur le DCE et ajoutée à son compte GitHub.
+### 6. Git : identité et connexion à GitHub (sur la passerelle)
 
-### 6. Télécharger les données (sur la passerelle)
+Sans identité, `git commit` échoue (« Author identity unknown »). Mettre la même que sur sa machine :
+
+```bash
+git config --global user.name "<nom>"
+git config --global user.email "<email>"
+```
+
+Pour pousser depuis le DCE (ou cloner si le dépôt est privé), GitHub refuse le mot de passe du compte. Le plus simple est GitHub CLI, avec une connexion par lien. `gh` s'installe dans le home, sans droits admin :
+
+```bash
+cd ~
+curl -LO https://github.com/cli/cli/releases/download/v2.62.0/gh_2.62.0_linux_amd64.tar.gz
+tar xzf gh_2.62.0_linux_amd64.tar.gz
+mv gh_2.62.0_linux_amd64/bin/gh ~/.local/bin/
+rm -rf gh_2.62.0_linux_amd64*
+gh auth login    # GitHub.com, HTTPS, « Authenticate Git » : Yes, « Login with a web browser »
+```
+
+`gh` affiche un code. On l'entre sur https://github.com/login/device depuis le navigateur de sa machine. `git push` fonctionne ensuite sans mot de passe.
+
+### 7. Télécharger les données (sur la passerelle)
 
 ```bash
 uv run python tools/prepare_data.py               # tous les datasets
@@ -85,7 +106,7 @@ uv run python tools/prepare_data.py imagenette    # ou une partie seulement
 
 Les datasets vont dans `DATA_ROOT/datasets`. Par défaut `DATA_ROOT` est `<racine du dépôt>/data`, dans le home, qui est accessible depuis tous les nœuds.
 
-### 7. Vérifier sur un nœud GPU
+### 8. Vérifier sur un nœud GPU
 
 ```bash
 srun -p gpu_inter -t 00:30:00 --pty bash    # session interactive de 30 min
@@ -155,7 +176,7 @@ Internet : la passerelle et les nœuds GPU y ont accès (testé). Python systèm
 
 ### Nœuds GPU
 
-Chaque nœud a 1 GPU, qui vient avec le nœud : Slurm ne déclare pas de gres (`Gres=(null)` dans `scontrol show node`), donc on ne demande ni `--gres` ni `--gpus-per-node`, sinon `sbatch` refuse le job. Le driver est le 610 (CUDA 13.3), ce qui suffit pour `torch 2.15` (CUDA 13.2). Prise en charge des RTX 2080 Ti (`sm_75`) à vérifier : voir [slurm/COMMANDS.md](../slurm/COMMANDS.md), section 3.
+Chaque nœud a 1 GPU, qui vient avec le nœud : Slurm ne déclare pas de gres (`Gres=(null)` dans `scontrol show node`), donc on ne demande ni `--gres` ni `--gpus-per-node`, sinon `sbatch` refuse le job. Le driver est le 610 (CUDA 13.3), ce qui suffit pour `torch 2.15` (CUDA 13.2). Les RTX 2080 Ti sont prises en charge : `sm_75` figure dans `torch.cuda.get_arch_list()` (vérifié sur tx00 le 2026-11-05).
 
 | Famille | GPU | Mémoire GPU | CPU / RAM | Partitions |
 |---|---|---|---|---|
