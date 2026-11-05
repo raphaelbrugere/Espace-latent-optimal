@@ -155,7 +155,7 @@ Internet : la passerelle et les nœuds GPU y ont accès (testé). Python systèm
 
 ### Nœuds GPU
 
-Chaque nœud a 1 GPU. Le driver est le 610 (CUDA 13.3), ce qui suffit pour `torch 2.15` (CUDA 13.2). Prise en charge des RTX 2080 Ti (`sm_75`) à vérifier : voir [slurm/COMMANDS.md](../slurm/COMMANDS.md), section 3.
+Chaque nœud a 1 GPU, qui vient avec le nœud : Slurm ne déclare pas de gres (`Gres=(null)` dans `scontrol show node`), donc on ne demande ni `--gres` ni `--gpus-per-node`, sinon `sbatch` refuse le job. Le driver est le 610 (CUDA 13.3), ce qui suffit pour `torch 2.15` (CUDA 13.2). Prise en charge des RTX 2080 Ti (`sm_75`) à vérifier : voir [slurm/COMMANDS.md](../slurm/COMMANDS.md), section 3.
 
 | Famille | GPU | Mémoire GPU | CPU / RAM | Partitions |
 |---|---|---|---|---|

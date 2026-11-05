@@ -152,6 +152,9 @@ Les fichiers cachés (`.gitkeep`) sont conservés. Il faut ensuite relancer la s
   ne sont pas concernés.
 - **La précision.** fp16 par défaut, car un job peut tomber sur une 2080 Ti, qui n'a pas de bf16. Le bf16
   n'est possible que sur `gpu_prod_long`, qui n'a que des nœuds `sh`. Le fp16 n'est pas disponible sur CPU.
+- **Ne pas demander de GPU à Slurm** (`--gres`, `--gpus-per-node`). Le DCE ne déclare pas de gres :
+  `sbatch` échoue avec « Invalid generic resource (gres) specification ». Le GPU vient avec le nœud
+  d'une partition `gpu_*`.
 - **Le compte est partagé à trois** (fairshare commun). Chaque heure de GPU fait baisser la priorité
   de toute l'équipe : faire un smoke test d'abord.
 - **Windows, en local.** Avec beaucoup de workers, Windows peut manquer de mémoire virtuelle

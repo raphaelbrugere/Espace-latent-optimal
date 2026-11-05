@@ -22,7 +22,9 @@ hydra:
     timeout_min: 2880
     nodes: 1
     tasks_per_node: 1
-    gpus_per_node: 1 # un seul GPU par nœud
+    # le DCE ne déclare pas de gres (Gres=(null)) : le GPU vient avec le nœud, ne pas le demander.
+    # --gpus-per-node fait échouer sbatch (« Invalid generic resource (gres) specification »).
+    gpus_per_node: null
     cpus_per_task: 8
     mem_gb: 24 # nœuds à 30 Go de RAM ; à ajuster si un job reste en attente
     constraint: null # "sh" pour forcer une RTX 3080 (bf16)
