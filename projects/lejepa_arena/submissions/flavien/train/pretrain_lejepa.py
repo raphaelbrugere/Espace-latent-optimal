@@ -10,9 +10,14 @@ Only the output must respect the contract: ../backbone.pt loadable by
 
     python submissions/baseline/train/pretrain_lejepa.py               # 800 epochs
     python submissions/baseline/train/pretrain_lejepa.py --epochs 100  # quicker, weaker
+
+Checkpointing (flavien): every --ckpt_every epochs the full training state is saved to
+--ckpt. With --resume, the run restarts from that file if it exists (a fresh start
+otherwise), so a job cut by the time limit or a preemption only loses the last few epochs.
 """
 import argparse
 import json
+import os
 import pathlib
 import sys
 import time
@@ -90,6 +95,10 @@ def main():
     p.add_argument("--img_size", type=int, default=128)
     p.add_argument("--workers", type=int, default=8)
     p.add_argument("--max_steps_per_epoch", type=int, default=None, help="for quick tests")
+    p.add_argument("--ckpt", type=pathlib.Path, default=SUB / "train" / "pretrain_ckpt.pt",
+                   help="full training state (backbone, projector, probe, optimizer, scheduler)")
+    p.add_argument("--ckpt_every", type=int, default=5, help="save the checkpoint every N epochs")
+    p.add_argument("--resume", action="store_true", help="restart from --ckpt if it exists")
     args = p.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     amp = dict(device_type="cuda", dtype=torch.bfloat16, enabled=device == "cuda")
@@ -116,8 +125,23 @@ def main():
         torch.optim.lr_scheduler.LinearLR(opt, 0.01, total_iters=warmup),
         torch.optim.lr_scheduler.CosineAnnealingLR(opt, max(1, total - warmup), eta_min=args.eta_min)], [warmup])
 
-    t0, probe_history = time.time(), []
-    for epoch in range(args.epochs):
+    # Hyperparameters that must not change between a run and its resumption.
+    frozen = {k: v for k, v in vars(args).items() if k not in ("workers", "ckpt", "ckpt_every", "resume")}
+    start_epoch, probe_history, elapsed_before = 0, [], 0.0
+    if args.resume and args.ckpt.exists():
+        ckpt = torch.load(args.ckpt, map_location=device, weights_only=False)
+        if ckpt["args"] != frozen:
+            raise ValueError(f"--resume with different hyperparameters: checkpoint {ckpt['args']}, now {frozen}")
+        for name, module in (("backbone", backbone), ("proj", proj), ("probe", probe), ("opt", opt), ("sched", sched)):
+            module.load_state_dict(ckpt[name])
+        torch.set_rng_state(ckpt["rng_cpu"])
+        if device == "cuda" and ckpt["rng_cuda"] is not None:
+            torch.cuda.set_rng_state(ckpt["rng_cuda"])
+        start_epoch, probe_history, elapsed_before = ckpt["epoch"] + 1, ckpt["probe_history"], ckpt["elapsed"]
+        print(f"resumed from {args.ckpt} at epoch {start_epoch}", flush=True)
+
+    t0 = time.time()
+    for epoch in range(start_epoch, args.epochs):
         backbone.train(); proj.train(); probe.train()
         for i, (views, y) in enumerate(train):
             if i >= steps:
@@ -146,13 +170,23 @@ def main():
               f"online-probe val acc {correct / total_n:.4f}", flush=True)
         probe_history.append(round(correct / total_n, 4))
 
+        if (epoch + 1) % args.ckpt_every == 0 or epoch + 1 == args.epochs:
+            state = {"backbone": backbone.state_dict(), "proj": proj.state_dict(), "probe": probe.state_dict(),
+                     "opt": opt.state_dict(), "sched": sched.state_dict(), "epoch": epoch,
+                     "probe_history": probe_history, "elapsed": elapsed_before + time.time() - t0,
+                     "rng_cpu": torch.get_rng_state(),
+                     "rng_cuda": torch.cuda.get_rng_state() if device == "cuda" else None, "args": frozen}
+            tmp = args.ckpt.with_name(args.ckpt.name + ".tmp")
+            torch.save(state, tmp)
+            os.replace(tmp, args.ckpt)  # atomic: a job killed while saving never leaves a broken checkpoint
+
     backbone.cpu().eval()
     torch.save(backbone.state_dict(), SUB / "backbone.pt")
     log = {"method": "lejepa", "pretraining_data": "imagenette train (unlabeled)",
            "online_probe_val_acc": probe_history[-1] if probe_history else None,
            "online_probe_history": probe_history,
-           "gpu_hours": round((time.time() - t0) / 3600, 3) if device == "cuda" else 0.0,
-           "backbone_sha256": weights_hash(backbone), "args": vars(args)}
+           "gpu_hours": round((elapsed_before + time.time() - t0) / 3600, 3) if device == "cuda" else 0.0,
+           "backbone_sha256": weights_hash(backbone), "args": {**vars(args), "ckpt": str(args.ckpt)}}
     (SUB / "train" / "pretrain_log.json").write_text(json.dumps(log, indent=2))
     print(f"saved {SUB / 'backbone.pt'}  sha256 {log['backbone_sha256'][:12]}")
 
