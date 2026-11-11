@@ -10,6 +10,7 @@ __pycache__/
 # Données, poids, sorties (jamais dans git)
 /data/
 /datasets/
+projects/lejepa_arena/data/
 *.ckpt
 *.pt
 *.pth

@@ -9,7 +9,9 @@ authors = [
     { name = "Raphaël Brugère", email = "raphael.brugere@student-cs.fr" },
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "scipy>=1.18.1",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.27,<0.12.0"]
