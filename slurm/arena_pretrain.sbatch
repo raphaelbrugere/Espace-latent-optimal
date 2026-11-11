@@ -19,7 +19,9 @@
 # L'arène calcule en bf16 (autocast, y compris arena/evaluate.py) : il faut une carte
 # Ampere ou plus récente. On exclut les GTX 1080 Ti (sh10-16) du pool sh, et les
 # RTX 2080 Ti (tx00-16) si on passe sur gpu_prod_night.
-#SBATCH --exclude=sh[10-16],tx[00-16]
+# Mémoire : un pas = 128 images × 4 vues ; ça ne tient pas dans les 10 Go d'une RTX 3080
+# (sh00, sh17-19), même pour la baseline. Il reste les RTX 3090 24 Go (sh01-09, sh20-22).
+#SBATCH --exclude=sh00,sh[10-19],tx[00-16]
 #SBATCH --output=logslurms/%x-%j.out
 #SBATCH --error=logslurms/%x-%j.err
 
