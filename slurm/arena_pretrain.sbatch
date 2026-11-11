@@ -16,6 +16,10 @@
 #SBATCH --partition=gpu_prod_long
 #SBATCH --time=24:00:00
 #SBATCH --cpus-per-task=8
+# L'arène calcule en bf16 (autocast, y compris arena/evaluate.py) : il faut une carte
+# Ampere ou plus récente. On exclut les GTX 1080 Ti (sh10-16) du pool sh, et les
+# RTX 2080 Ti (tx00-16) si on passe sur gpu_prod_night.
+#SBATCH --exclude=sh[10-16],tx[00-16]
 #SBATCH --output=logslurms/%x-%j.out
 #SBATCH --error=logslurms/%x-%j.err
 
@@ -31,6 +35,12 @@ export ARENA_DATA=${ARENA_DATA:-$PWD/data}
 
 echo "job $SLURM_JOB_ID sur $(hostname), soumission $SUB, arguments: $*"
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
-python -c "import torch; assert torch.cuda.is_available(), 'pas de GPU visible'; print('torch', torch.__version__, torch.cuda.get_device_name())"
+python -c "
+import torch
+assert torch.cuda.is_available(), 'pas de GPU visible'
+name, cc = torch.cuda.get_device_name(), torch.cuda.get_device_capability()
+print('torch', torch.__version__, name, 'compute capability', cc)
+assert cc >= (8, 0), f'{name} ne gère pas le bf16 (il faut Ampere ou plus récent)'
+"
 
 python "submissions/$SUB/train/pretrain_lejepa.py" --workers "${SLURM_CPUS_PER_TASK:-8}" "$@"
