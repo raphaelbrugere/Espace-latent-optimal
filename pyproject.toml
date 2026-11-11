@@ -25,6 +25,10 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Arène LeJEPA : code des organisateurs, copié tel quel dans chaque soumission.
+extend-exclude = ["projects/lejepa_arena"]
+# Indispensable avec pre-commit, qui passe les fichiers un par un à ruff.
+force-exclude = true
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
