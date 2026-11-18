@@ -1,6 +1,5 @@
 name: Bug
 description: Quelque chose ne marche pas comme prévu
-title: "[bug] "
 labels: ["bug"]
 body:
   - type: textarea
@@ -14,27 +13,14 @@ body:
     id: reproduce
     attributes:
       label: Pour reproduire
-      description: Commande exacte et config utilisées.
-      render: bash
+      description: >-
+        Commande exacte et environnement (local, DCE, CI), ou lien du job CI. Pour un run :
+        son dossier et le contenu de son git.txt (commit, fichiers non commités).
     validations:
       required: true
-  - type: dropdown
-    id: environment
-    attributes:
-      label: Environnement
-      options:
-        - local
-        - DCE (Slurm)
-        - CI
-    validations:
-      required: true
-  - type: input
-    id: git_sha
-    attributes:
-      label: Commit
-      description: Sortie de `git rev-parse --short HEAD`
   - type: textarea
     id: logs
     attributes:
-      label: Logs / traceback
+      label: Logs
+      description: Traceback, ou extrait du run.log du dossier de run.
       render: text
