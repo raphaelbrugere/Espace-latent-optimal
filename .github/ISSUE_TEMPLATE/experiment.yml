@@ -1,71 +1,48 @@
 name: Expérience
 description: Carte d'expérience, obligatoire avant tout gros run
-title: "[exp] "
 labels: ["experiment"]
 body:
   - type: textarea
     id: hypothesis
     attributes:
       label: Hypothèse
-      description: Ce qu'on cherche à vérifier et le résultat attendu.
+      description: >-
+        Ce qu'on cherche à vérifier et le résultat attendu. Citer la config `experiment=`
+        si elle existe déjà.
     validations:
       required: true
-  - type: dropdown
-    id: workstream
+  - type: textarea
+    id: references
     attributes:
-      label: Workstream
-      options:
-        - A. Data et infra
-        - B. Backbones et SSL
-        - C. Heads et évaluation
-        - D. Embarqué
-    validations:
-      required: true
-  - type: dropdown
-    id: stage
-    attributes:
-      label: Étape
-      options:
-        - pretrain (SSL)
-        - train (supervisé)
-        - eval
-        - export / bench
-    validations:
-      required: true
-  - type: input
-    id: config
-    attributes:
-      label: Config
-      description: Fichier dans configs/experiment/
-      placeholder: configs/experiment/vittiny_lejepa_in100.yaml
-    validations:
-      required: true
-  - type: input
-    id: command
-    attributes:
-      label: Commande de lancement
-      placeholder: python tools/pretrain.py experiment=vittiny_lejepa_in100 cluster=dce -m
+      label: Références
+      description: Runs auxquels on se compare, un nom par ligne (docs/HUB.md).
+      render: text
   - type: input
     id: budget
     attributes:
       label: Budget de calcul estimé
-      placeholder: 4 GPU × 24 h
-  - type: checkboxes
-    id: checks
+      placeholder: 1 GPU × 14 h
+  - type: textarea
+    id: runs
     attributes:
-      label: Avant de lancer
-      options:
-        - label: Smoke test passé (experiment=smoke)
-          required: true
-        - label: Config commitée sur main (arbre git propre)
-          required: true
-  - type: input
-    id: wandb
+      label: Runs
+      description: >-
+        À compléter à chaque lancement : un nom complet par ligne (`<run>`,
+        `<run>/downstream/<…>`, `…/eval/<…>`), utilisable tel quel dans les commandes `lo`.
+      render: text
+  - type: textarea
+    id: results
     attributes:
-      label: Lien W&B
-      description: À compléter une fois le run lancé.
+      label: Résultats
+      description: Scores clés par run (results.json), face aux références.
   - type: textarea
     id: conclusion
     attributes:
-      label: Résultats et conclusion
-      description: À compléter à la fin. L'hypothèse est-elle validée ?
+      label: Conclusion
+      description: Hypothèse validée ou non, suite à donner.
+  - type: checkboxes
+    id: published
+    attributes:
+      label: Avant de fermer
+      options:
+        - label: Runs publiés (`lo hub push <run>`)

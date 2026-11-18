@@ -1,0 +1,31 @@
+name: Lint
+
+# Toujours lancé, doc comprise : quelques secondes, et gitleaks protège le dépôt public.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Les hooks de .pre-commit-config.yaml, pour qui n'a pas fait `pre-commit install`.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.3 # pas d'étiquette majeure depuis v8 : version exacte
+        with:
+          version-file: pyproject.toml # uv de [tool.uv] required-version ; Python : .python-version
+          enable-cache: true
+
+      # groupe dev seul (pre-commit, ruff, pytest) : ni torch ni le projet
+      - name: Install
+        run: uv sync --locked --only-group dev
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Lint (pre-commit)
+        run: uv run --no-sync pre-commit run --all-files --show-diff-on-failure
