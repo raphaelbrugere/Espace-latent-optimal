@@ -1,10 +1,11 @@
 # @package _global_
 # Machine personnelle. Environnement uniquement : rien qui change le résultat d'un run.
+defaults:
+  - _base
+  - _self_
+
 cluster:
   name: local
-  data_root: ${oc.env:DATA_ROOT,${project_root:}/data}
-  results_root: ${oc.env:OUTPUT_ROOT,${project_root:}/results}
-  mlflow: true # base MLflow par run (<run>/mlflow.db) ; false : désactivé
   num_workers: 4
   device: auto # cuda si disponible, sinon cpu
   progress_bar: true

@@ -8,6 +8,7 @@
 # mlflow.db. Rien n'est modifié dans le dossier d'entraînement. Un entraînement est désigné
 # par son chemin, ou par <run>/downstream/<…> : téléchargé depuis le Hub s'il manque en local.
 defaults:
+  - common/hydra
   - cluster: local
   - _self_
 
@@ -21,14 +22,8 @@ experiment_name: default
 allow_dirty: true # une évaluation ne s'entraîne pas : pas de garde-fou git
 
 hydra:
-  job:
-    chdir: false
   run: # journal du lancement seulement : les résultats vont dans eval/ de chaque entraînement
     dir: ${cluster.results_root}/.eval/${now:%Y%m%d_%H%M%S}
   sweep:
-    dir: ${cluster.results_root}/.eval/${now:%Y%m%d_%H%M%S}
+    dir: ${hydra.run.dir}
     subdir: ${hydra.job.num}
-  job_logging:
-    handlers:
-      file:
-        filename: ${hydra.runtime.output_dir}/run.log

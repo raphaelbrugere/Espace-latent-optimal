@@ -2,9 +2,11 @@
 #
 #   lo train backbone=from_run backbone.run=<run> task=pets_seg              # neck + tête de la tâche
 #   lo train backbone=from_run backbone.run=<run> task=pets_seg neck=fpn head=conv_seg neck.channels=128
-#   lo train backbone=from_run backbone.run=<run> task=pets_det head=soft_argmax #       neck_from=pets_seg-fpn-conv_seg-20261117_090000                      # neck gelé, tête seule
+#   lo train backbone=from_run backbone.run=<run> task=pets_det head=soft_argmax \r
+#       neck_from=pets_seg-fpn-conv_seg-20261117_090000                      # neck gelé, tête seule
 #   lo train backbone=vit_s8_dino backbone_data=imagenet1k backbone_method=dino task=imagenette_cls
-#   lo train backbone=from_run backbone.run=<run> #       task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det -m  # les 5 tâches
+#   lo train backbone=from_run backbone.run=<run> \r
+#       task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det -m  # les 5 tâches
 # (-m après tous les overrides, ou avant tous : pas au milieu)
 #
 # neck, head et epochs absents : ceux de la baseline de la tâche (evaluation/tasks.py).
@@ -12,6 +14,7 @@
 #   downstream/<tâche>-<neck>-<tête>-<AAAAMMJJ_HHMMSS>/
 #       neck.pt (pas avec neck_from), head.pt, README.md, results.json, config, run.log, mlflow.db
 defaults:
+  - common/hydra
   - backbone: ??? # obligatoire : from_run, vit_s8_dino…
   - neck: null # null : neck par défaut de la tâche (configs/neck/)
   - head: null # null : tête par défaut de la tâche (configs/head/)
@@ -55,14 +58,8 @@ trainer:
   log_every_n_steps: 50
 
 hydra:
-  job:
-    chdir: false
-  run:
-    dir: ${cluster.results_root}/${train_dir:${hydra.runtime.choices.backbone},${oc.select:backbone.run,""},${backbone_run},${backbone_data},${backbone_method},${task},${hydra.runtime.choices.neck},${hydra.runtime.choices.head},${neck_from}}
+  run: # même nom qu'en sweep (voir pretrain.yaml)
+    dir: ${hydra.sweep.dir}/${hydra.sweep.subdir}
   sweep:
     dir: ${cluster.results_root}
-    subdir: ${train_dir:${hydra.runtime.choices.backbone},${oc.select:backbone.run,""},${backbone_run},${backbone_data},${backbone_method},${task},${hydra.runtime.choices.neck},${hydra.runtime.choices.head},${neck_from},${hydra.job.num}}
-  job_logging:
-    handlers:
-      file:
-        filename: ${hydra.runtime.output_dir}/run.log
+    subdir: ${train_dir:${hydra.runtime.choices.backbone},${oc.select:backbone.run,""},${backbone_run},${backbone_data},${backbone_method},${task},${hydra.runtime.choices.neck},${hydra.runtime.choices.head},${neck_from},${oc.select:hydra.job.num,""}}

@@ -10,6 +10,7 @@
 # <données>-<archi>-<méthode>-<date> est le dossier du backbone, de ses entraînements
 # downstream et de leurs évaluations, et son dépôt Hugging Face (docs/HUB.md).
 defaults:
+  - common/hydra
   - backbone: ??? # obligatoire : aucun backbone par défaut
   - method: lejepa
   - data: imagenette
@@ -27,14 +28,10 @@ trainer: # réglages du Trainer sans effet sur le résultat de l'entraînement
   log_every_n_steps: 50
 
 hydra:
-  job:
-    chdir: false # le code tourne depuis le dossier de lancement
+  # Un seul nom, celui du sweep : date suffixée par _<n> pour le job n > 0 d'un -m. Sans -m,
+  # hydra.job.num vaut ??? : oc.select le remplace par "" (pas de suffixe).
   run:
-    dir: ${cluster.results_root}/${run_name:${data_abbrev:${data.source._target_}},${hydra.runtime.choices.backbone},${hydra.runtime.choices.method}}/backbone
-  sweep: # un dossier par job : date suffixée par _<n> pour les jobs n > 0
+    dir: ${hydra.sweep.dir}/${hydra.sweep.subdir}
+  sweep:
     dir: ${cluster.results_root}
-    subdir: ${run_name:${data_abbrev:${data.source._target_}},${hydra.runtime.choices.backbone},${hydra.runtime.choices.method},${hydra.job.num}}/backbone
-  job_logging:
-    handlers:
-      file:
-        filename: ${hydra.runtime.output_dir}/run.log
+    subdir: ${run_name:${data_abbrev:${data.source._target_}},${hydra.runtime.choices.backbone},${hydra.runtime.choices.method},${oc.select:hydra.job.num,""}}/backbone
