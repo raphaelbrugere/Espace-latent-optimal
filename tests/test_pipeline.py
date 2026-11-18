@@ -39,7 +39,15 @@ def tool(name: str, *overrides: str, root) -> None:
         f"cluster.data_root='{root}/data'",
         f"cluster.results_root='{root}/results'",
     ]
-    proc = subprocess.run(args, cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=900)
+    # stdin fermé : pas de terminal, donc pas de question « commit non poussé » (run.confirm_pushed)
+    proc = subprocess.run(
+        args,
+        cwd=PROJECT_ROOT,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=900,
+    )
     assert proc.returncode == 0, f"{name} a échoué :\n{proc.stdout[-3000:]}\n{proc.stderr[-3000:]}"
 
 

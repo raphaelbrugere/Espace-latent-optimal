@@ -44,7 +44,49 @@ def test_dce_dirty_tree_allowed_explicitly_or_for_smoke(monkeypatch):
     run.check_launch(cfg("dce"), CLEAN)
 
 
+# --- confirm_pushed ----------------------------------------------------------------------
+
+
+class Stdin:
+    def __init__(self, tty):
+        self.tty = tty
+
+    def isatty(self):
+        return self.tty
+
+
+def test_pushed_commit_runs_without_question(monkeypatch):
+    monkeypatch.setattr(run, "unpushed_commit", lambda: None)
+    assert run.confirm_pushed(ask=lambda _: pytest.fail("question posée"))
+
+
+@pytest.mark.parametrize("answer,ok", [("y", True), ("Y", True), ("n", False), ("", False)])
+def test_unpushed_commit_asks_in_a_terminal(monkeypatch, answer, ok):
+    monkeypatch.setattr(run, "unpushed_commit", lambda: "abc1234def")
+    monkeypatch.setattr(run.sys, "stdin", Stdin(tty=True))
+    asked = []
+    assert run.confirm_pushed(ask=lambda q: asked.append(q) or answer) is ok
+    assert "abc1234" in asked[0] and "traçabilité" in asked[0]
+
+
+def test_unpushed_commit_only_warns_without_terminal(monkeypatch, capsys):
+    monkeypatch.setattr(run, "unpushed_commit", lambda: "abc1234def")
+    monkeypatch.setattr(run.sys, "stdin", Stdin(tty=False))
+    assert run.confirm_pushed(ask=lambda _: pytest.fail("question posée"))
+    assert "traçabilité" in capsys.readouterr().err
+
+
 # --- lightning_settings ------------------------------------------------------------------
+
+
+@pytest.fixture
+def gpu_ok(monkeypatch):
+    monkeypatch.setattr(run, "cuda_problem", lambda: None)
+
+
+@pytest.fixture
+def gpu_broken(monkeypatch):
+    monkeypatch.setattr(run, "cuda_problem", lambda: "pilote trop ancien")
 
 
 @pytest.mark.parametrize(
@@ -53,18 +95,38 @@ def test_dce_dirty_tree_allowed_explicitly_or_for_smoke(monkeypatch):
         ("cpu", "fp32", {"accelerator": "cpu", "precision": "32-true"}),
         ("cpu", "bf16", {"accelerator": "cpu", "precision": "bf16-mixed"}),
         ("cuda", "fp16", {"accelerator": "gpu", "precision": "16-mixed"}),
+        ("auto", "fp16", {"accelerator": "gpu", "precision": "16-mixed"}),
     ],
 )
-def test_lightning_settings_mapping(device, precision, expected):
+def test_lightning_settings_mapping(gpu_ok, device, precision, expected):
     assert run.lightning_settings(device, precision) == expected
 
 
-def test_fp16_on_cpu_is_refused(monkeypatch):
+def test_fp16_on_cpu_is_refused(gpu_broken):
     with pytest.raises(ValueError, match="fp16"):
         run.lightning_settings("cpu", "fp16")
-    monkeypatch.setattr(run, "_cuda", lambda: False)
     with pytest.raises(ValueError, match="fp16"):
         run.lightning_settings("auto", "fp16")
+
+
+# --- resolve_device ----------------------------------------------------------------------
+
+
+def test_cpu_never_touches_the_gpu(monkeypatch):
+    monkeypatch.setattr(run, "cuda_problem", lambda: pytest.fail("GPU interrogé"))
+    assert run.resolve_device("cpu") == "cpu"
+
+
+def test_auto_uses_the_gpu_only_if_usable(monkeypatch):
+    monkeypatch.setattr(run, "cuda_problem", lambda: None)
+    assert run.resolve_device("auto") == "cuda"
+    monkeypatch.setattr(run, "cuda_problem", lambda: "pilote trop ancien")
+    assert run.resolve_device("auto") == "cpu"
+
+
+def test_cuda_with_unusable_gpu_is_refused(gpu_broken):
+    with pytest.raises(RuntimeError, match="pilote trop ancien"):
+        run.resolve_device("cuda")
 
 
 @pytest.mark.parametrize("bad", [("tpu", "fp32"), ("cpu", "fp8")])

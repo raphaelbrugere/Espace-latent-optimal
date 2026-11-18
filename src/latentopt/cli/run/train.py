@@ -90,7 +90,7 @@ def cached_datasets(
     cfg: DictConfig, task: Task, backbone: torch.nn.Module, keys: Sequence[str]
 ) -> tuple[CachedFeatures, CachedFeatures]:
     """Features train (deux variantes si retournement) et val, extraites ou relues."""
-    use_cuda = cfg.cluster.device != "cpu" and torch.cuda.is_available()
+    use_cuda = run.resolve_device(cfg.cluster.device) == "cuda"
     common = dict(
         backbone=backbone,
         sha=weights_hash(backbone),

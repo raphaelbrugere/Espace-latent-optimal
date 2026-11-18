@@ -31,8 +31,12 @@ import json
 import logging
 import os
 import platform
+import shutil
 import subprocess
+import sys
 import time
+from collections.abc import Callable
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -48,24 +52,60 @@ from latentopt.models.contract import count_params, weights_hash
 
 log = logging.getLogger(__name__)
 
-ACCELERATORS = {"auto": "auto", "cpu": "cpu", "cuda": "gpu"}
+DEVICES = ("auto", "cpu", "cuda")  # cluster.device
+ACCELERATORS = {"cpu": "cpu", "cuda": "gpu"}  # device résolu -> accelerator de Lightning
 PRECISIONS = {"fp32": "32-true", "fp16": "16-mixed", "bf16": "bf16-mixed"}
 
 
-def git_info() -> dict[str, Any]:
-    def git(*args: str) -> str | None:
+def _git(*args: str) -> str | None:
+    """Sortie d'une commande git dans le dépôt ; None si git est absent ou échoue."""
+    try:
         out = subprocess.run(["git", *args], cwd=PROJECT_ROOT, capture_output=True, text=True)
-        return out.stdout.strip() if out.returncode == 0 else None
+    except FileNotFoundError:
+        return None
+    return out.stdout.strip() if out.returncode == 0 else None
 
+
+def git_info() -> dict[str, Any]:
     # git absent ou hors dépôt : les champs valent None, le run ne plante pas
-    changed = git("status", "--porcelain")
+    changed = _git("status", "--porcelain")
     return {
-        "commit": git("rev-parse", "HEAD"),
-        "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
+        "commit": _git("rev-parse", "HEAD"),
+        "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
         "dirty": bool(changed),
         "changed": changed.splitlines() if changed else [],
-        "author": git("config", "user.name"),
+        "author": _git("config", "user.name"),
     }
+
+
+def unpushed_commit() -> str | None:
+    """HEAD s'il n'est sur aucune branche distante connue (`git push` pas fait), sinon None."""
+    head = _git("rev-parse", "HEAD")
+    if head is None:
+        return None
+    return head if _git("rev-list", "-n1", "HEAD", "--not", "--remotes") else None
+
+
+def confirm_pushed(ask: Callable[[str], str] = input) -> bool:
+    """Avant un run (`lo pretrain|train|eval`) : le commit doit être sur GitHub.
+
+    git.txt et MLflow enregistrent le commit du run ; s'il n'est pas poussé, personne d'autre
+    ne peut retrouver le code du run. En terminal, demande s'il faut continuer (y/n, non par
+    défaut) ; sans terminal (job Slurm, CI, tests), avertit seulement.
+    """
+    commit = unpushed_commit()
+    if commit is None:
+        return True
+    warning = (
+        f"Le commit {commit[:7]} n'est pas poussé sur GitHub : le run l'enregistrera, mais "
+        "personne d'autre ne pourra retrouver son code. Sans `git push`, la traçabilité du run "
+        "est cassée."
+    )
+    if not sys.stdin.isatty():
+        print(f"ATTENTION : {warning}", file=sys.stderr)
+        return True
+    answer = ask(f"{warning}\nPousser d'abord (git push). Continuer quand même ? [y/n] ")
+    return answer.strip().lower() in ("y", "yes")
 
 
 def _sha256_text(path: Path) -> str:
@@ -104,17 +144,49 @@ def check_launch(cfg: DictConfig, git: dict[str, Any]) -> None:
 
 def lightning_settings(device: str, precision: str) -> dict[str, str]:
     """device (cluster) et precision (méthode) de la config -> arguments du Trainer."""
-    accelerator = ACCELERATORS[device]
-    on_cpu = accelerator == "cpu" or (accelerator == "auto" and not _cuda())
-    if on_cpu and precision == "fp16":
+    accelerator = ACCELERATORS[resolve_device(device)]
+    if accelerator == "cpu" and precision == "fp16":
         raise ValueError("fp16 n'est pas disponible sur CPU : precision=fp32 (ou bf16)")
     return {"accelerator": accelerator, "precision": PRECISIONS[precision]}
 
 
-def _cuda() -> bool:
+def resolve_device(device: str) -> str:
+    """cluster.device (auto, cpu, cuda) -> cpu ou cuda, le GPU seulement s'il est utilisable.
+
+    auto : cuda si cuda_problem() ne trouve rien, sinon cpu (avertissement si un GPU NVIDIA est
+    présent mais inutilisable). cuda : erreur si le GPU est inutilisable, plutôt qu'un job long
+    sur CPU.
+    """
+    if device not in DEVICES:
+        raise KeyError(device)
+    if device == "cpu":
+        return "cpu"
+    problem = cuda_problem()
+    if problem is None:
+        return "cuda"
+    if device == "cuda":
+        raise RuntimeError(f"device=cuda, mais le GPU est inutilisable : {problem}")
+    if shutil.which("nvidia-smi"):
+        log.warning("GPU NVIDIA présent mais inutilisable, run sur CPU : %s", problem)
+    return "cpu"
+
+
+@cache
+def cuda_problem() -> str | None:
+    """None si torch calcule sur le GPU 0, sinon la raison : pas de GPU, pilote trop ancien
+    pour le CUDA de torch, ou carte que ses wheels ne prennent plus en charge (INSTALL.md)."""
     import torch
 
-    return torch.cuda.is_available()
+    if not torch.cuda.is_available():
+        return (
+            f"torch {torch.__version__} ne voit aucun GPU (pas de GPU NVIDIA, ou pilote trop "
+            f"ancien pour CUDA {torch.version.cuda})"
+        )
+    try:  # une vraie opération : une carte trop ancienne passe is_available() puis échoue ici
+        (torch.ones(1, device="cuda") + 1).item()
+    except RuntimeError as e:
+        return f"{torch.cuda.get_device_name(0)} : {e}"
+    return None
 
 
 def prepare(cfg: DictConfig, run_dir: Path) -> dict[str, Any]:

@@ -32,7 +32,7 @@ def main(cfg: DictConfig) -> None:
     os.environ["OUTPUT_ROOT"] = cfg.cluster.results_root  # désignés par nom (hub.locate)
     run.prepare(cfg, Path(HydraConfig.get().runtime.output_dir))
     run.lightning_settings(cfg.cluster.device, cfg.precision)  # vérifie fp16 sur CPU
-    use_cuda = cfg.cluster.device != "cpu" and torch.cuda.is_available()
+    use_cuda = run.resolve_device(cfg.cluster.device) == "cuda"
     results = evaluate_downstream(
         list(cfg.downstream),
         split=cfg.split,

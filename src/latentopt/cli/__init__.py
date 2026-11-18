@@ -69,6 +69,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"commande inconnue : lo {' '.join(argv[:2])}\nvoir : {hint}", file=sys.stderr)
         return 2
     module, func, family, _ = COMMANDS[words]
+    # ici, sur la machine qui lance (PC, passerelle du DCE) : un job Slurm ne peut pas répondre
+    if family == "run" and "--help" not in rest and "-h" not in rest:
+        from latentopt.run import confirm_pushed
+
+        if not confirm_pushed():
+            print("Run annulé : git push, puis relancer.", file=sys.stderr)
+            return 1
     fn = getattr(importlib.import_module(module), func)
     # la commande se présente comme un programme à part entière (« usage: lo hub push … »)
     saved, sys.argv = sys.argv, [f"lo {' '.join(words)}", *rest]
