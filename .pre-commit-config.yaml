@@ -1,6 +1,3 @@
-# Base de référence copiée telle quelle : jamais reformatée ni modifiée par les hooks.
-exclude: ^projects/lejepa_arena/
-
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

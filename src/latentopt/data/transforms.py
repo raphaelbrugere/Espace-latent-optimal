@@ -1,12 +1,13 @@
 """Transforms du protocole d'évaluation, appliqués conjointement à (image, cible).
 
 Les transforms d'éval font partie du protocole : les modifier change les scores et
-casse la comparabilité avec `projects/lejepa_arena`. Les transforms d'entraînement
+casse la comparabilité avec les scores existants. Les transforms d'entraînement
 `hflip` (probabilité de retournement horizontal : 0.5 pour la baseline ; 0 et 1 pour
 les deux variantes du cache de features) sont l'augmentation minimale de la baseline.
 """
 
 import random
+from typing import Any
 
 import numpy as np
 import torch
@@ -19,6 +20,7 @@ IMAGENET_STD = (0.229, 0.224, 0.225)
 
 
 def normalize(img: Image.Image) -> Tensor:
+    """PIL -> (3, H, W) float32 dans [0, 1], puis centré-réduit aux statistiques ImageNet."""
     return TF.normalize(
         TF.to_dtype(TF.to_image(img), torch.float32, scale=True), IMAGENET_MEAN, IMAGENET_STD
     )
@@ -34,13 +36,14 @@ def check_hflip(hflip: float) -> float:
 
 
 def mask_to_tensor(mask: Image.Image) -> Tensor:
+    """Masque PIL (mode L, un indice de classe par pixel) -> (H, W) int64."""
     return torch.from_numpy(np.array(mask, dtype=np.int64))
 
 
 class CenterCrop:
     """Classification : petit côté à `size`, puis crop central (exemple minimal LeJEPA)."""
 
-    def __init__(self, size: int):
+    def __init__(self, size: int) -> None:
         self.size = size
 
     def __call__(self, img: Image.Image, label: int) -> tuple[Tensor, int]:
@@ -50,7 +53,7 @@ class CenterCrop:
 class SquareResize:
     """Classification d'objets centrés (Galaxy10) : resize anisotrope, sans crop."""
 
-    def __init__(self, size: int):
+    def __init__(self, size: int) -> None:
         self.size = size
 
     def __call__(self, img: Image.Image, label: int) -> tuple[Tensor, int]:
@@ -65,7 +68,7 @@ class SegmentationTransform:
     Train : le masque suit l'image (nearest), ce qui permet le collate par défaut.
     """
 
-    def __init__(self, size: int, native_mask: bool = True, hflip: float = 0.0):
+    def __init__(self, size: int, native_mask: bool = True, hflip: float = 0.0) -> None:
         self.size, self.native_mask, self.hflip = size, native_mask, check_hflip(hflip)
 
     def __call__(self, img: Image.Image, mask: Image.Image) -> tuple[Tensor, Tensor]:
@@ -83,10 +86,12 @@ class DetectionTransform:
     """Image en carré `size`. Les boîtes sont normalisées dans [0, 1] et l'IoU entre
     boîtes alignées est invariante par scaling des axes : aucune correction à faire."""
 
-    def __init__(self, size: int, hflip: float = 0.0):
+    def __init__(self, size: int, hflip: float = 0.0) -> None:
         self.size, self.hflip = size, check_hflip(hflip)
 
-    def __call__(self, img: Image.Image, target: dict) -> tuple[Tensor, dict[str, Tensor]]:
+    def __call__(
+        self, img: Image.Image, target: dict[str, Any]
+    ) -> tuple[Tensor, dict[str, Tensor]]:
         img = normalize(TF.resize(img, [self.size, self.size]))
         box = target["box"].clone()
         if self.hflip and random.random() < self.hflip:
@@ -94,6 +99,6 @@ class DetectionTransform:
         return img, {"box": box, "label": torch.tensor(target["label"])}
 
 
-def collate_native(batch: list) -> tuple[Tensor, list[Tensor]]:
+def collate_native(batch: list[tuple[Tensor, Tensor]]) -> tuple[Tensor, list[Tensor]]:
     """Images de taille commune, masques à leur résolution native : liste, pas de stack."""
     return torch.stack([x for x, _ in batch]), [y for _, y in batch]

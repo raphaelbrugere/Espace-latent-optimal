@@ -1,4 +1,4 @@
-# ViT-S/8 à poids aléatoires : baseline de la small league (exemple minimal LeJEPA).
+# ViT-S/8 à poids aléatoires : backbone de la baseline (exemple minimal LeJEPA).
 # 21,7M paramètres ; 4 cartes au stride 8 (pas de pyramide).
 _target_: latentopt.models.backbones.archs.vit.TimmViT
 

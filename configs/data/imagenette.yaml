@@ -1,6 +1,6 @@
-# Pool de pré-entraînement de la small league : train officiel d'Imagenette, sans labels
+# Pool de pré-entraînement du protocole : train officiel d'Imagenette, sans labels
 # (les labels ne servent qu'à la sonde en ligne, sur embeddings détachés).
-# Prérequis : python tools/prepare_data.py imagenette
+# Prérequis : lo data prepare imagenette
 source:
   _target_: latentopt.data.datasets.imagenette.pretraining_images
 img_size: 128

@@ -27,20 +27,24 @@ import json
 import logging
 import random
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn as nn
+from torch import Tensor
 from torch.utils.data import DataLoader, Dataset, default_collate
 
 from latentopt.data.paths import features_root
+from latentopt.evaluation.tasks import Task
 
 log = logging.getLogger(__name__)
 FORMAT = 2  # 2 : précision dans le nom, dossier daté
 AUTOCAST = {"fp32": None, "fp16": torch.float16, "bf16": torch.bfloat16}
 
 
-def variants(transform) -> dict[str, object]:
+def variants(transform: Any) -> dict[str, Any]:
     """Transform à retournement aléatoire -> ses deux variantes déterministes."""
     if not getattr(transform, "hflip", 0):
         return {"": transform}
@@ -70,12 +74,20 @@ def cache_path(
     return base / task / name
 
 
-def _images_and_targets(batch):
+def _images_and_targets(batch: list[tuple[Tensor, Any]]) -> tuple[Tensor, list[Any]]:
     return torch.stack([x for x, _ in batch]), [y for _, y in batch]
 
 
 @torch.no_grad()
-def extract(backbone: nn.Module, dataset, keys, batch_size, num_workers, device, precision) -> dict:
+def extract(
+    backbone: nn.Module,
+    dataset: Dataset,
+    keys: list[str],
+    batch_size: int,
+    num_workers: int,
+    device: torch.device,
+    precision: str,
+) -> dict[str, Any]:
     """Features `keys` de tout le dataset (ordre conservé) et cibles, sous autocast."""
     backbone = backbone.to(device).eval()
     dtype = AUTOCAST[precision]
@@ -93,18 +105,18 @@ def extract(backbone: nn.Module, dataset, keys, batch_size, num_workers, device,
 
 
 def load_or_extract(
-    backbone,
-    sha,
-    task,
-    split,
-    transform,
-    keys,
-    batch_size,
-    num_workers,
-    device,
-    precision,
+    backbone: nn.Module,
+    sha: str,
+    task: Task,
+    split: str,
+    transform: Any,
+    keys: list[str],
+    batch_size: int,
+    num_workers: int,
+    device: torch.device,
+    precision: str,
     info: dict | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Une entrée par variante du transform ; extraite une fois, relue ensuite.
     `info` (config et origine du backbone) va dans info.json à la création du dossier."""
     base = backbone_dir(sha, info)
@@ -139,23 +151,23 @@ class CachedFeatures(Dataset):
     """(features d'une image, cible) depuis le cache ; variante retournée avec la
     probabilité `hflip` du transform d'origine (aucun tirage s'il n'y a qu'une variante)."""
 
-    def __init__(self, entries: list[dict], hflip: float = 0.0):
+    def __init__(self, entries: list[dict], hflip: float = 0.0) -> None:
         self.entries, self.hflip = entries, hflip
         self.keys = list(entries[0]["feats"])
 
     def __len__(self) -> int:
         return len(self.entries[0]["targets"])
 
-    def __getitem__(self, i: int):
+    def __getitem__(self, i: int) -> tuple[dict[str, Tensor], Any]:
         flip = len(self.entries) > 1 and random.random() < self.hflip
         entry = self.entries[1 if flip else 0]
         return {k: entry["feats"][k][i] for k in self.keys}, entry["targets"][i]
 
 
-def collate(native_targets: bool):
+def collate(native_targets: bool) -> Callable[[list], tuple[dict[str, Tensor], Any]]:
     """Features empilées ; cibles empilées, ou laissées en liste (masques à résolution native)."""
 
-    def fn(batch):
+    def fn(batch: list) -> tuple[dict[str, Tensor], Any]:
         feats = default_collate([f for f, _ in batch])
         targets = [t for _, t in batch]
         return feats, (targets if native_targets else default_collate(targets))

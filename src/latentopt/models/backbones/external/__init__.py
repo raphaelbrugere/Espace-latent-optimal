@@ -1,6 +1,6 @@
 """Poids externes : un module par jeu de poids, qui charge dans une architecture d'archs/.
 
-`DOWNLOADS` : nom -> téléchargement, utilisé par tools/prepare_data.py.
+`DOWNLOADS` : nom -> téléchargement, utilisé par `lo data prepare`.
 """
 
 from latentopt.models.backbones.external import dino

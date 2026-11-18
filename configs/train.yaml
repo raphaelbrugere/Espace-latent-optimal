@@ -1,31 +1,47 @@
-# Config de premier niveau de tools/train.py : une tête sur un backbone gelé.
+# Config de premier niveau de `lo train` : un neck et une tête sur un backbone gelé.
 #
-#   python tools/train.py backbone=from_run backbone.run=results/pretrain/<exp>/<date> task=pets_seg
-#   python tools/train.py backbone=vit_s8_dino task=imagenette_cls head=linear
-#   python tools/train.py backbone=from_run backbone.run=<run> \
-#       task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det -m  # les 5 tâches
+#   lo train backbone=from_run backbone.run=<run> task=pets_seg              # neck + tête de la tâche
+#   lo train backbone=from_run backbone.run=<run> task=pets_seg neck=fpn head=conv_seg neck.channels=128
+#   lo train backbone=from_run backbone.run=<run> task=pets_det head=soft_argmax #       neck_from=pets_seg-fpn-conv_seg-20261117_090000                      # neck gelé, tête seule
+#   lo train backbone=vit_s8_dino backbone_data=imagenet1k backbone_method=dino task=imagenette_cls
+#   lo train backbone=from_run backbone.run=<run> #       task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det -m  # les 5 tâches
 # (-m après tous les overrides, ou avant tous : pas au milieu)
 #
-# head et epochs absents : recette de la baseline (evaluation/tasks.py).
-# Chaque run écrit dans results/train/<experiment_name>/<task>/<date>/ : head.pt, results.json.
+# neck, head et epochs absents : ceux de la baseline de la tâche (evaluation/tasks.py).
+# Chaque run écrit dans results/<run>/ (docs/HUB.md) :
+#   downstream/<tâche>-<neck>-<tête>-<AAAAMMJJ_HHMMSS>/
+#       neck.pt (pas avec neck_from), head.pt, README.md, results.json, config, run.log, mlflow.db
 defaults:
   - backbone: ??? # obligatoire : from_run, vit_s8_dino…
-  - head: null # null : tête par défaut de la tâche
+  - neck: null # null : neck par défaut de la tâche (configs/neck/)
+  - head: null # null : tête par défaut de la tâche (configs/head/)
   - cluster: local
   - _self_
   - optional experiment: null
 
 task: ??? # nom d'une tâche du registre (evaluation/tasks.py)
+# Neck gelé, repris d'un entraînement précédent sur le même backbone : <tâche>-<neck>-<tête>-<date>
+# (dossier downstream/ du backbone), ou chemin / nom complet (<run>/downstream/<…>). Seule la tête
+# apprend ; le dossier du run porte le nom du neck repris.
+neck_from: null
 experiment_name: default
-seed: 0 # graine de la tête (init, ordre des données), enregistrée dans head.pt
+# Nom du backbone dans les dossiers et sur le Hub (<données>-<archi>-<méthode>-<date>).
+# backbone=from_run : celui du run de pré-entraînement. Backbone externe ou aléatoire :
+# <backbone_data>-<choix de backbone>-<backbone_method>-<date du lancement>. Fixer backbone_run
+# (ex. imagenet1k-vit_s8_dino-dino-20261116_180000) pour que les têtes d'un même backbone
+# externe, lancées dans des jobs séparés, partagent le même dossier.
+backbone_run: ""
+backbone_data: none # données de pré-entraînement d'un backbone externe (ex. imagenet1k)
+backbone_method: none # méthode d'un backbone externe (ex. dino)
+seed: 0 # graine du neck et de la tête (init, ordre des données), enregistrée dans les .pt
 resume: null
 allow_dirty: false
 
 # Features du backbone extraites une fois dans data/features/ (clé : empreinte du backbone),
-# puis tête entraînée dessus. false : backbone appliqué à la volée à chaque epoch.
+# puis neck et tête entraînés dessus. false : backbone appliqué à la volée à chaque epoch.
 cache_features: true
 
-# Recette de la baseline (train_head.py de l'arène)
+# Recette de la baseline des têtes
 epochs: null # null : epochs par défaut de la tâche
 max_steps_per_epoch: null
 batch_size: 64
@@ -42,10 +58,10 @@ hydra:
   job:
     chdir: false
   run:
-    dir: ${cluster.results_root}/train/${experiment_name}/${task}/${now:%Y-%m-%d_%H-%M-%S}
+    dir: ${cluster.results_root}/${train_dir:${hydra.runtime.choices.backbone},${oc.select:backbone.run,""},${backbone_run},${backbone_data},${backbone_method},${task},${hydra.runtime.choices.neck},${hydra.runtime.choices.head},${neck_from}}
   sweep:
-    dir: ${cluster.results_root}/train/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}
-    subdir: ${task}
+    dir: ${cluster.results_root}
+    subdir: ${train_dir:${hydra.runtime.choices.backbone},${oc.select:backbone.run,""},${backbone_run},${backbone_data},${backbone_method},${task},${hydra.runtime.choices.neck},${hydra.runtime.choices.head},${neck_from},${hydra.job.num}}
   job_logging:
     handlers:
       file:

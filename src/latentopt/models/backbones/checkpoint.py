@@ -1,6 +1,7 @@
-"""Backbone issu d'un de nos runs de pré-entraînement (format de latentopt/run.py).
+"""Backbone issu d'un de nos runs de pré-entraînement : results/<run>/backbone/ (format de
+latentopt/run.py, emplacement de latentopt/hub.py).
 
-L'architecture est relue dans le config.yaml du run, jamais redemandée : impossible de
+L'architecture est relue dans le config.yaml du backbone, jamais redemandée : impossible de
 charger les poids dans une architecture différente. Les poids (backbone.pt) sont vérifiés
 contre l'empreinte enregistrée dans results.json.
 """
@@ -13,17 +14,22 @@ import torch.nn as nn
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
-from latentopt.data.paths import PROJECT_ROOT
+from latentopt import hub
 from latentopt.models.contract import weights_hash
 
 
 def resolve_run(run: str | Path) -> Path:
-    """Chemin absolu, ou relatif à la racine du projet."""
-    path = Path(run)
-    return path if path.is_absolute() else PROJECT_ROOT / path
+    """Dossier backbone/ d'un run désigné par son chemin (results/<run>, ou un dossier qu'il
+    contient) ou son nom : absent en local, le run est téléchargé depuis le Hub."""
+    return hub.run_root(hub.locate(run)) / hub.BACKBONE
 
 
 def from_run(run: str) -> nn.Module:
+    """Reconstruit le backbone d'un run terminé (config.yaml, backbone.pt, results.json requis).
+
+    Lève FileNotFoundError si un fichier manque, ValueError si les poids ne correspondent
+    pas à l'empreinte de results.json.
+    """
     run_dir = resolve_run(run)
     for name in ("config.yaml", "backbone.pt", "results.json"):
         if not (run_dir / name).exists():

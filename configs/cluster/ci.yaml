@@ -4,6 +4,7 @@ cluster:
   name: ci
   data_root: ${project_root:}/data
   results_root: ${project_root:}/results
+  mlflow: true # base MLflow par run (<run>/mlflow.db) ; false : désactivé
   num_workers: 0
   device: cpu
   progress_bar: false

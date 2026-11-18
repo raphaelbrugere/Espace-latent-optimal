@@ -1,6 +1,4 @@
-# Linear probe sur `embed` : tâches de classification.
-# Fournis à l'exécution : embed_dim (backbone), num_classes (tâche).
-_target_: latentopt.models.heads.LinearProbe
+# Tête linear : classifieur linéaire sur un vecteur (neck embed_norm).
+# Fournis à l'exécution : in_dim (neck) et num_classes (tâche).
+_target_: latentopt.models.heads.LinearHead
 _partial_: true
-
-norm: true # LayerNorm avant la projection ; false = sonde linéaire stricte

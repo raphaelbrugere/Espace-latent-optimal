@@ -60,7 +60,7 @@ Installer l'extension `ms-vscode-remote.remote-ssh`, puis lancer « Remote-SSH: 
 ### 4. Installer uv (sur la passerelle)
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -LsSf https://astral.sh/uv/0.13.7/install.sh | sh    # version de [tool.uv] required-version
 source ~/.local/bin/env    # ou se déconnecter et se reconnecter
 ```
 
@@ -71,7 +71,7 @@ La passerelle et les nœuds de calcul ont tous accès à Internet. On installe q
 ```bash
 git clone https://github.com/raphaelbrugere/Espace-latent-optimal.git
 cd Espace-latent-optimal
-uv sync
+uv sync                      # télécharge aussi Python 3.12.16 (le 3.12.3 du système n'est pas utilisé)
 uv run pre-commit install    # les commits faits depuis le DCE passent aussi par les hooks
 ```
 
@@ -100,8 +100,8 @@ gh auth login    # GitHub.com, HTTPS, « Authenticate Git » : Yes, « Login wit
 ### 7. Télécharger les données (sur la passerelle)
 
 ```bash
-uv run python tools/prepare_data.py               # tous les datasets
-uv run python tools/prepare_data.py imagenette    # ou une partie seulement
+uv run lo data prepare               # tous les datasets
+uv run lo data prepare imagenette    # ou une partie seulement
 ```
 
 Les datasets vont dans `DATA_ROOT/datasets`. Par défaut `DATA_ROOT` est `<racine du dépôt>/data`, dans le home, qui est accessible depuis tous les nœuds.
@@ -125,10 +125,10 @@ Après `srun`, attendre que l'invite passe de `@chome` au nom du nœud avant de 
 | Se connecter | sa machine | `ssh dce` |
 | Mettre à jour le code | passerelle | `git pull && uv sync` |
 | Session interactive GPU | passerelle | `srun -p gpu_inter -t 00:30:00 --pty bash` |
-| Soumettre un job | passerelle | `uv run python tools/pretrain.py experiment=<nom> cluster=dce -m` (voir [slurm/COMMANDS.md](../slurm/COMMANDS.md)) |
+| Soumettre un job | passerelle | `uv run lo pretrain experiment=<nom> cluster=dce -m` (voir [slurm/COMMANDS.md](../slurm/COMMANDS.md)) |
 | Voir ses jobs | passerelle | `squeue -u <login>` |
 | Annuler un job | passerelle | `scancel <job_id>` |
-| Récupérer des résultats | sa machine | `scp -r dce:~/Espace-latent-optimal/results/<étape>/<expérience>/<date> .` |
+| Récupérer des résultats | sa machine | `scp -r dce:~/Espace-latent-optimal/results/<run> .` (ou `lo hub push` puis `lo hub pull`) |
 
 Rappels (voir aussi [CONTRIBUTING.md](../CONTRIBUTING.md)) :
 
@@ -154,6 +154,8 @@ On ne peut rien écrire dans `/mounts/datasets`. Pour éviter que chaque membre 
 - **Ouvrir son dossier `data` au groupe Unix commun.** Le propriétaire lance `chmod g+x ~ ~/Espace-latent-optimal` et `chmod -R g+rX ~/Espace-latent-optimal/data`. Les autres mettent `DATA_ROOT` sur ce chemin dans leur `~/.bashrc`. À vérifier : `id` doit afficher le même groupe pour tous.
 - **Demander au support un dossier partagé en écriture.** C'est la solution si les données grossissent : features en cache, checkpoints, ImageNet-100.
 
+Base MLflow d'équipe (voir [slurm/COMMANDS.md](../slurm/COMMANDS.md), section 9) : `lo mlflow sync` n'a besoin que de **lire** les `results/` des autres. Chacun lance une fois `chmod g+x ~ ~/Espace-latent-optimal` et `chmod -R g+rX ~/Espace-latent-optimal/results`, et ajoute `umask 027` à son `~/.bashrc` pour que les runs suivants soient eux aussi lisibles par le groupe.
+
 ## Partitions
 
 Relevé fait avec `sinfo` et `sacctmgr` le 2026-11-05. Les partitions `*_tp` et `*_tp_resa` sont réservées aux TP.
@@ -172,24 +174,30 @@ Compte Slurm du projet : `3a_cs_ia_n40_safran`.
 - **Priorité commune** : le temps GPU consommé par l'un fait baisser la priorité (fairshare) des jobs de tous, et elle remonte avec le temps.
 - **Partitions testées** : `gpu_inter` et `gpu_prod_long` (jobs exécutés). Les partitions `*_tp` et `*_tp_resa` servent aux TP.
 
-Internet : la passerelle et les nœuds GPU y ont accès (testé). Python système sur la passerelle : 3.12.3.
+Internet : la passerelle et les nœuds GPU y ont accès (testé). Python système sur la passerelle : 3.12.3, non utilisé par le projet (uv installe le Python de `.python-version`).
 
 ### Nœuds GPU
 
 Chaque nœud a 1 GPU, qui vient avec le nœud : Slurm ne déclare pas de gres (`Gres=(null)` dans `scontrol show node`), donc on ne demande ni `--gres` ni `--gpus-per-node`, sinon `sbatch` refuse le job. Le driver est le 610 (CUDA 13.3), ce qui suffit pour `torch 2.15` (CUDA 13.2). Les RTX 2080 Ti sont prises en charge : `sm_75` figure dans `torch.cuda.get_arch_list()` (vérifié sur tx00 le 2026-11-05).
 
-| Famille | GPU | Mémoire GPU | CPU / RAM | Partitions |
+GPU d'après la documentation officielle, partitions d'après le relevé. CPU : 1 socket, 2 threads par cœur ; « cœurs » compte les threads vus par Slurm. RAM : 32 Go (30 Go utilisables).
+
+| Nœuds | GPU | Mémoire GPU | CPU | Partitions |
 |---|---|---|---|---|
-| `sh00`–`sh22` | RTX 3080 (Ampere) | 10 Go | 8 cœurs / 30 Go | `gpu_inter`, `gpu_prod_long` |
-| `tx00`–`tx16` | RTX 2080 Ti (Turing) | 11 Go | 8 cœurs / 30 Go | `gpu_inter`, et `gpu_prod_night` pour `tx09`–`tx16` |
-| `dani01`–`dani17` | non relevé (nœuds éteints lors du relevé) | | 12 cœurs / 30 Go | `gpu_inter`, `gpu_prod_night` |
+| `sh01`–`sh09`, `sh20`–`sh22` | RTX 3090 (Ampere) | 24 Go | Xeon W-2125, 8 cœurs | `gpu_inter`, `gpu_prod_long` |
+| `sh00`, `sh17`–`sh19` | RTX 3080 (Ampere) | 10 Go | Xeon W-2225, 8 cœurs | `gpu_inter`, `gpu_prod_long` |
+| `sh10`–`sh16` | GTX 1080 Ti (Pascal) | 11 Go | Xeon W-2125, 8 cœurs | `gpu_inter`, `gpu_prod_long` |
+| `tx00`–`tx16` | RTX 2080 Ti (Turing) | 11 Go | Xeon W-2125 (W-2225 pour `tx05`), 8 cœurs | `gpu_inter`, et `gpu_prod_night` pour `tx09`–`tx16` |
+| `dani01`–`dani17` | RTX 5080 (Blackwell) | 16 Go | Xeon w3-2423, 12 cœurs | `gpu_inter`, `gpu_prod_night` |
 
 Lors du relevé, `sh01`–`sh16` étaient en maintenance (`drain`) : seuls 6 nœuds servaient `gpu_prod_long`.
 
+Les GTX 1080 Ti (`sm_61`) ne sont sans doute plus prises en charge par les wheels PyTorch CUDA 13. À vérifier avec `torch.cuda.get_arch_list()` sur un `sh10`–`sh16` ; sinon, les exclure avec `--exclude=sh[10-16]`.
+
 Choix de la précision :
-- **`16-mixed` (fp16) par défaut.** Un job `gpu_inter` peut tomber sur un nœud `tx` : la 2080 Ti n'a pas de bf16 matériel.
-- **`bf16-mixed` possible** seulement si le job est sûr de tourner sur un `sh` (`gpu_prod_long`, ou `-C sh`).
-- **Mémoire** : prévoir 10 Go de mémoire GPU au plus.
+- **`16-mixed` (fp16) par défaut.** Un job peut tomber sur une 2080 Ti ou une 1080 Ti, qui n'ont pas de bf16 matériel.
+- **`bf16-mixed` possible** seulement si le job est sûr de tourner sur une Ampere ou une Blackwell (par exemple `-w` ou `--exclude` sur les autres nœuds).
+- **Mémoire** : prévoir 10 Go de mémoire GPU au plus (RTX 3080).
 
 Chargement des données :
 - **`num_workers` à 6 au plus** : un nœud n'a que 8 cœurs.
@@ -202,10 +210,19 @@ sbatch -p gpu_inter -t 00:05:00 -o gpu_info.out --wrap 'hostname; nvidia-smi'
 cat gpu_info.out    # une fois le job terminé (squeue vide)
 ```
 
+### Autres machines
+
+D'après la documentation officielle (OS : Ubuntu 18.04 ou 20.04 ; disque local SSD 256 Go / SATA 1 To ; home sur NAS) :
+
+| Machine | Rôle | CPU | RAM |
+|---|---|---|---|
+| `chome` | passerelle | 2 × Xeon Silver 4214R (12 cœurs, Cascade Lake) | 64 Go |
+| `kyle01`–`kyle68` | calcul CPU | 2 × Xeon Silver 4110 (8 cœurs, Skylake) | 64 Go |
+| `sar01`–`sar32` | calcul CPU | 2 × Xeon E5-2637 v3 (4 cœurs, Haswell) | 32 Go |
+
 ## À compléter
 
-- GPU des nœuds `dani*`.
-- Variables d'environnement lues par le code : `DATA_ROOT` (défaut `<racine du dépôt>/data`), `FEATURES_ROOT` (défaut `DATA_ROOT/features`), `MODELS_ROOT` (défaut `DATA_ROOT/models`). Pas encore utilisées : `OUTPUT_ROOT`, `ENV_ROOT`.
+- Variables d'environnement lues par le code : `DATA_ROOT` (défaut `<racine du dépôt>/data`), `FEATURES_ROOT` (défaut `DATA_ROOT/features`), `MODELS_ROOT` (défaut `DATA_ROOT/models`). `OUTPUT_ROOT` : `lo pretrain`, `lo train` et `lo eval` la fixent à `cluster.results_root`, et `latentopt.hub` y cherche (ou télécharge) les runs désignés par leur nom (défaut `<racine du dépôt>/results`). Pas encore utilisée : `ENV_ROOT`.
 
 ## Citation
 

@@ -19,7 +19,7 @@ from torch import Tensor
 class SIGReg(nn.Module):
     """(V, N, D) -> statistique d'Epps-Pulley moyennée sur les V vues et les directions."""
 
-    def __init__(self, knots: int = 17, num_slices: int = 256, domain: float = 3.0):
+    def __init__(self, knots: int = 17, num_slices: int = 256, domain: float = 3.0) -> None:
         super().__init__()
         self.num_slices = num_slices
         t = torch.linspace(0, domain, knots)

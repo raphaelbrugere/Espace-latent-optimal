@@ -1,0 +1,9 @@
+# Pool de pré-entraînement : trainval d'Oxford-IIIT Pet sans le test de pets_det (tiré de
+# trainval). Hors protocole (pool du protocole : imagenette) : scores non comparables à
+# ceux de la baseline. Pas de sonde en ligne : Pets n'a pas de tâche de classification.
+# Prérequis : lo data prepare oxford_pets
+source:
+  _target_: latentopt.data.datasets.oxford_pets.pretraining_images
+img_size: 128
+num_probe_classes: null # pas de sonde
+probe_task: null # pas de validation pendant le pré-entraînement

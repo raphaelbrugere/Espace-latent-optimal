@@ -1,10 +1,14 @@
-# Config de premier niveau de tools/pretrain.py : pré-entraînement d'un backbone.
+# Config de premier niveau de `lo pretrain` : pré-entraînement d'un backbone.
 #
-#   python tools/pretrain.py backbone=vit_s8                        # local
-#   python tools/pretrain.py experiment=smoke                       # smoke run
-#   python tools/pretrain.py experiment=<nom> cluster=dce -m        # job Slurm (-m obligatoire)
+#   lo pretrain backbone=vit_s8                        # local
+#   lo pretrain experiment=smoke                       # smoke run
+#   lo pretrain experiment=<nom> cluster=dce -m        # job Slurm (-m obligatoire)
 #
-# Chaque run écrit dans results/pretrain/<experiment_name>/<date>/ : config, run.log, métriques.
+# Chaque run écrit dans results/<données>-<archi>-<méthode>-<AAAAMMJJ_HHMMSS>/backbone/ :
+# backbone.pt, README.md, config, run.log, métriques. <données> est le nom court (ABBREV) du
+# module du dataset, ex. imnt160 : il est dans le code, pas dans les configs.
+# <données>-<archi>-<méthode>-<date> est le dossier du backbone, de ses entraînements
+# downstream et de leurs évaluations, et son dépôt Hugging Face (docs/HUB.md).
 defaults:
   - backbone: ??? # obligatoire : aucun backbone par défaut
   - method: lejepa
@@ -26,10 +30,10 @@ hydra:
   job:
     chdir: false # le code tourne depuis le dossier de lancement
   run:
-    dir: ${cluster.results_root}/pretrain/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}
-  sweep:
-    dir: ${cluster.results_root}/pretrain/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}
-    subdir: ${hydra.job.num}
+    dir: ${cluster.results_root}/${run_name:${data_abbrev:${data.source._target_}},${hydra.runtime.choices.backbone},${hydra.runtime.choices.method}}/backbone
+  sweep: # un dossier par job : date suffixée par _<n> pour les jobs n > 0
+    dir: ${cluster.results_root}
+    subdir: ${run_name:${data_abbrev:${data.source._target_}},${hydra.runtime.choices.backbone},${hydra.runtime.choices.method},${hydra.job.num}}/backbone
   job_logging:
     handlers:
       file:

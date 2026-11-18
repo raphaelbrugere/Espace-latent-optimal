@@ -1,28 +1,41 @@
-"""Évaluation d'un backbone et de ses têtes (evaluate.py de projects/lejepa_arena).
+"""Évaluation des necks et des têtes entraînés par `lo train`.
 
-Entrée : des runs de tools/train.py (une tête par tâche), tous sur le même backbone.
-Sortie : le format JSON de l'arène (team, backbone, violations, tasks), lu par
-reporting/leaderboard.py.
+Entrée : des dossiers d'entraînement (results/<run>/downstream/<tâche>-<neck>-<tête>-<date>),
+sur un ou plusieurs backbones. Chaque tête est reconstruite avec son neck (le neck.pt qu'elle
+désigne, appris avec elle ou repris gelé) et son backbone, puis évaluée sur le split demandé.
+Sortie : une entrée par entraînement, écrite par `write` dans le results.json d'un nouveau
+dossier <entraînement>/eval/<split>-<date>/ (voir cli/run/eval.py).
 
-Violations (signalées, pas bloquantes, comme dans l'arène) : backbone > 30M paramètres,
-tête hors budget, tête entraînée sur un autre backbone que celui évalué.
+Violations (signalées, pas bloquantes) : backbone > 30M paramètres, neck ou tête appris sur
+d'autres poids que ceux chargés (empreintes). Les paramètres du backbone, du neck et de la
+tête sont rapportés séparément, sans limite pour le neck et la tête.
 """
 
 import json
 import logging
 import time
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn as nn
 from hydra.utils import instantiate
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
+from latentopt import hub
 from latentopt.evaluation.features import AUTOCAST, CachedFeatures, collate, load_or_extract
 from latentopt.evaluation.tasks import Task, get_task, to_device, to_float
+from latentopt.models import recipe
 from latentopt.models.backbones.checkpoint import resolve_run
-from latentopt.models.contract import BACKBONE_MAX_PARAMS, count_params, make_head, weights_hash
+from latentopt.models.contract import (
+    BACKBONE_MAX_PARAMS,
+    Downstream,
+    count_params,
+    load_head,
+    load_neck,
+    weights_hash,
+)
 
 log = logging.getLogger(__name__)
 
@@ -48,9 +61,9 @@ def score(
     return metric.compute()
 
 
-def backbone_info(run_cfg) -> dict:
-    """Origine du backbone : nos runs (temps GPU, données), poids externes (référence,
-    affichée sans rang) ou poids aléatoires."""
+def backbone_info(run_cfg: Any) -> dict[str, Any]:
+    """Origine du backbone : nos runs (temps GPU, données), poids externes (référence)
+    ou poids aléatoires."""
     target = run_cfg.backbone._target_
     if target.endswith("checkpoint.from_run"):
         pre_dir = resolve_run(run_cfg.backbone.run)
@@ -63,76 +76,101 @@ def backbone_info(run_cfg) -> dict:
     return {"reference": False, "gpu_hours": None, "pretraining_data": "aucun (poids aléatoires)"}
 
 
-def evaluate_runs(
-    runs: list[str],
+def neck_folder(head_dir: Path, ref: str) -> Path:
+    """Dossier du neck d'une tête : `ref` (neck_dir de head.pt), relatif au dossier du backbone
+    (downstream/<…> : le sien, ou celui du neck repris)."""
+    path = Path(ref)
+    return path if path.is_absolute() else hub.run_root(head_dir) / path
+
+
+def load_trained(
+    head_dir: Path, cfg: DictConfig, backbone: nn.Module
+) -> tuple[Downstream, dict[str, Any], list[str]]:
+    """Neck + tête d'un dossier d'entraînement, poids chargés ; renvoie aussi le checkpoint de la
+    tête et les violations de provenance (empreintes du backbone et du neck)."""
+    task = get_task(cfg.task)
+    ckpt = torch.load(head_dir / "head.pt", map_location="cpu", weights_only=False)
+    neck_pt = neck_folder(head_dir, ckpt["neck_dir"]) / "neck.pt"
+    neck_ckpt = torch.load(neck_pt, map_location="cpu", weights_only=False)
+    neck = recipe.build_neck(OmegaConf.create(neck_ckpt["config"]), backbone)
+    issues = []
+    try:
+        load_neck(neck, neck_pt, backbone)
+    except ValueError as e:
+        issues.append(str(e))
+    head = recipe.build_head(cfg.head, neck, task.num_classes)
+    try:
+        load_head(head, head_dir / "head.pt", backbone, neck)
+    except ValueError as e:
+        issues.append(str(e))
+    return Downstream(neck, head), ckpt, issues
+
+
+def evaluate_downstream(
+    trained: list[str | Path],
     split: str,
-    team: str,
     device: torch.device,
     precision: str = "fp32",
     cache_features: bool = True,
     num_workers: int = 0,
     batch_size: int = 64,
-) -> dict:
-    run_dirs = [resolve_run(r) for r in runs]
-    cfgs = [OmegaConf.load(d / "config.yaml") for d in run_dirs]
-    torch.manual_seed(cfgs[0].seed)  # comme tools/train.py : backbone à poids aléatoires
-    backbone = instantiate(cfgs[0].backbone).eval()
-    sha, n_params = weights_hash(backbone), count_params(backbone)
-    info = backbone_info(cfgs[0])
-    result = {
-        "team": team,
-        "split": split,
-        "time": time.strftime("%Y-%m-%d %H:%M"),
-        "reference": info["reference"],
-        "backbone": {
-            "sha256": sha,
-            "params": n_params,
-            "gpu_hours": info["gpu_hours"],
-            "pretraining_data": info["pretraining_data"],
-        },
-        "violations": [],
-        "tasks": {},
-    }
-    if n_params > BACKBONE_MAX_PARAMS:
-        result["violations"].append(f"backbone has {n_params:,} params > {BACKBONE_MAX_PARAMS:,}")
+) -> dict[Path, dict[str, Any]]:
+    """Évalue chaque entraînement sur `split` ; renvoie, par dossier, son entrée d'évaluation.
 
-    for run_dir, cfg in zip(run_dirs, cfgs, strict=True):
-        if OmegaConf.to_container(cfg.backbone) != OmegaConf.to_container(cfgs[0].backbone):
-            raise ValueError(f"{run_dir} : backbone différent des autres runs évalués ensemble")
+    Un backbone partagé par plusieurs têtes n'est construit qu'une fois. Avec
+    `cache_features`, les features sont extraites une fois (cache de features.py, batch 256).
+    """
+    backbones: dict[str, tuple[nn.Module, str, int, dict]] = {}
+    out = {}
+    for head_dir in (hub.locate(t) for t in trained):
+        cfg = OmegaConf.load(head_dir / "config.yaml")
+        key = json.dumps([OmegaConf.to_container(cfg.backbone, resolve=True), cfg.seed])
+        if key not in backbones:
+            torch.manual_seed(cfg.seed)  # comme `lo train` : backbone à poids aléatoires
+            backbone = instantiate(cfg.backbone).eval()
+            backbones[key] = (backbone, weights_hash(backbone), count_params(backbone),
+                              backbone_info(cfg))  # fmt: skip
+        backbone, sha, n_params, info = backbones[key]
         task = get_task(cfg.task)
-        ckpt = torch.load(run_dir / "head.pt", map_location="cpu", weights_only=False)
-        head = make_head(instantiate(cfg.head), backbone, task.num_classes)
-        head.load_state_dict(ckpt["state_dict"])
-        issues = []
-        if ckpt.get("backbone_sha256") != sha:
-            issues.append("head was trained on a different backbone than backbone.pt")
-        if count_params(head) > task.head_max_params:
-            issues.append(f"head has {count_params(head):,} params > {task.head_max_params:,}")
+        model, ckpt, issues = load_trained(head_dir, cfg, backbone)
+        if n_params > BACKBONE_MAX_PARAMS:
+            issues.append(f"backbone : {n_params:,} paramètres > {BACKBONE_MAX_PARAMS:,}")
 
         if cache_features:
-            info = {"backbone": OmegaConf.to_container(cfg.backbone, resolve=True)}
-            entries = load_or_extract(backbone, sha, task, split, task.eval_transform, head.in_keys,
-                                      256, num_workers, device, precision, info)  # fmt: skip
+            feats_info = {"backbone": OmegaConf.to_container(cfg.backbone, resolve=True)}
+            entries = load_or_extract(backbone, sha, task, split, task.eval_transform,
+                                      model.in_keys, 256, num_workers, device, precision,
+                                      feats_info)  # fmt: skip
             native = task.collate_fn is not None
             loader = DataLoader(CachedFeatures(entries), batch_size=batch_size,
                                 collate_fn=collate(native_targets=native))  # fmt: skip
         else:
             loader = DataLoader(task.dataset(split), batch_size=batch_size,
                                 num_workers=num_workers, collate_fn=task.collate_fn)  # fmt: skip
-        metrics = score(backbone, head, task, loader, device, precision)
-        result["tasks"][task.name] = {
+        metrics = score(backbone, model, task, loader, device, precision)
+        out[head_dir] = {
+            "split": split,
             "score": metrics[task.primary_metric],
             "metric": task.primary_metric,
             "metrics": metrics,
-            "head_params": count_params(head),
+            "time": time.strftime("%Y-%m-%d %H:%M"),
+            "params": {
+                "backbone": n_params,
+                "neck": count_params(model.neck),
+                "head": count_params(model.head),
+            },  # fmt: skip
+            "backbone": {"sha256": sha, **info},
             "seed": ckpt.get("seed"),
             "violations": issues,
         }
-        flag = "" if not issues else "   VIOLATION: " + "; ".join(issues)
-        log.info("[%s] %s: %s = %.4f%s", team, task.name, task.primary_metric,
+        flag = "" if not issues else "   VIOLATION : " + "; ".join(issues)
+        log.info("%s : %s %s = %.4f%s", head_dir.name, split, task.primary_metric,
                  metrics[task.primary_metric], flag)  # fmt: skip
-    return result
+    return out
 
 
-def write(result: dict, path: Path) -> None:
-    path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+def write(eval_dir: Path, entry: dict[str, Any]) -> None:
+    """results.json d'une évaluation, dans son propre dossier eval/<split>-<date>/ : le
+    dossier d'entraînement n'est jamais modifié."""
+    eval_dir.mkdir(parents=True, exist_ok=True)
+    (eval_dir / "results.json").write_text(json.dumps(entry, indent=2) + "\n", encoding="utf-8")

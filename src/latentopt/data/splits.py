@@ -2,20 +2,29 @@
 
 Les splits dérivés (holdout, stratifié) sont stockés par identifiant stable (chemin
 relatif, nom de fichier, ligne d'une révision HF épinglée), jamais par indice : un
-changement d'ordre de listage côté torchvision ou HF ne peut pas les déplacer. Les
-algorithmes et graines sont ceux de `projects/lejepa_arena`, donc les ensembles
-obtenus sont identiques aux siens.
+changement d'ordre de listage côté torchvision ou HF ne peut pas les déplacer.
 
-Les splits officiels (Flowers-102, tests d'Imagenette et de Pets) ne sont pas figés ici.
+Les splits officiels (Flowers-102, tests d'Imagenette et de Pets) passent par le même
+mécanisme : le JSON liste les identifiants que la définition officielle du dataset donne.
+
+Chaque dataset définit son calcul dans son propre module (`freeze_splits`), appelé par
+`build` : un JSON existant est lu tel quel, sinon il est créé. `freeze` ne le réécrit
+qu'avec `force`.
 """
 
 import json
-from collections.abc import Sequence
+import logging
+import os
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 SPLITS_DIR = Path(__file__).parent / "splits"
+log = logging.getLogger(__name__)
+
+Computed = tuple[dict[str, list[int]], Sequence[str], dict[str, Any]]
 
 
 def holdout(n: int, frac: float = 0.05, seed: int = 0) -> dict[str, list[int]]:
@@ -41,22 +50,41 @@ def stratified(
     return {k: sorted(v) for k, v in out.items()}
 
 
-def save(name: str, splits: dict[str, list[int]], ids: Sequence[str], **meta) -> Path:
+def save(name: str, splits: dict[str, list[int]], ids: Sequence[str], **meta: Any) -> Path:
     """Convertit des indices en identifiants et écrit le JSON (un id par ligne)."""
     named = {split: sorted(str(ids[i]) for i in idx) for split, idx in splits.items()}
     path = SPLITS_DIR / f"{name}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"dataset": name, **meta, "splits": named}
-    path.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
+    os.replace(tmp, path)  # atomique : un job concurrent ne lit jamais un JSON à moitié écrit
     return path
 
 
-def load(name: str) -> dict:
+def freeze(name: str, compute: Callable[[], Computed], force: bool = False) -> Path:
+    """Écrit `splits/<name>.json` avec `compute()` = (indices par split, ids, méta).
+
+    Un JSON existant est conservé tel quel, sans appeler `compute` (donc sans toucher au
+    dataset) : le réécrire change les ensembles, et avec eux la comparabilité des scores.
+    `force` ne sert qu'à le faire exprès."""
+    path = SPLITS_DIR / f"{name}.json"
+    existed = path.exists()
+    if existed and not force:
+        log.info("splits %s : déjà figés, conservés (%s)", name, path)
+        return path
+    parts, ids, meta = compute()
+    path = save(name, parts, ids, **meta)
+    sizes = ", ".join(f"{k} {len(v)}" for k, v in parts.items())
+    log.info("splits %s : %s (%s) -> %s", name, "réécrits" if existed else "créés", sizes, path)
+    return path
+
+
+def load(name: str) -> dict[str, Any]:
+    """JSON figé du dataset ; `FileNotFoundError` si les splits n'ont pas été gelés."""
     path = SPLITS_DIR / f"{name}.json"
     if not path.exists():
-        raise FileNotFoundError(
-            f"{path} absent : lance `python tools/prepare_data.py --freeze-splits`"
-        )
+        raise FileNotFoundError(f"{path} absent : lance `uv run lo data prepare`")
     return json.loads(path.read_text(encoding="utf-8"))
 
 

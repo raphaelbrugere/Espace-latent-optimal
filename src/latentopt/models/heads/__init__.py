@@ -1,7 +1,8 @@
-"""Têtes downstream. Chacune prend le dict de features du backbone en entrée."""
+"""Têtes downstream : chacune lit la sortie d'un neck (voir models/necks/). Un neck et une tête
+forment une recette (configs/head/, models/recipe.py)."""
 
-from latentopt.models.heads.fpn import FPNHead
-from latentopt.models.heads.linear import LinearProbe
-from latentopt.models.heads.soft_argmax import SoftArgmaxHead
+from latentopt.models.heads.fpn import ConvSegHead
+from latentopt.models.heads.linear import LinearHead
+from latentopt.models.heads.soft_argmax import SoftArgmaxDecoder
 
-__all__ = ["FPNHead", "LinearProbe", "SoftArgmaxHead"]
+__all__ = ["ConvSegHead", "LinearHead", "SoftArgmaxDecoder"]

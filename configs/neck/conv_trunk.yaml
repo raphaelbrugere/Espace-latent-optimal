@@ -1,0 +1,6 @@
+# Neck conv_trunk : tronc convolutif sur une carte du backbone (détection).
+# Fourni à l'exécution : feature_info (backbone). Variante : neck.channels=64 (même nom de dossier).
+_target_: latentopt.models.necks.ConvTrunk
+_partial_: true
+channels: 128 # largeur du tronc convolutif
+target_stride: 8 # le neck lit la carte dont le stride est le plus proche

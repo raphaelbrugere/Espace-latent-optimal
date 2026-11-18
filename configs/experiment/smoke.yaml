@@ -2,8 +2,8 @@
 # Smoke run : vérifie le pipeline de bout en bout en ~1 min (CPU), avant tout job long.
 # Données synthétiques, scores sans signification.
 #
-#   python tools/pretrain.py experiment=smoke
-#   python tools/pretrain.py experiment=smoke cluster=dce method.precision=fp16 \
+#   lo pretrain experiment=smoke
+#   lo pretrain experiment=smoke cluster=dce method.precision=fp16 \
 #       hydra.launcher.partition=gpu_inter hydra.launcher.timeout_min=30 -m
 defaults:
   - override /backbone: vit_s8

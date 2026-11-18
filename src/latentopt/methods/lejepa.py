@@ -10,14 +10,15 @@ Les losses portent sur le projecteur g ; c'est `embed` = f(x) qui sert en aval. 
 en ligne lit des embeddings détachés : elle suit l'entraînement sans fuite de labels
 vers le backbone.
 
-Valeurs par défaut : celles de l'exemple minimal de LeJEPA, reprises de la baseline de
-`projects/lejepa_arena` (ViT-S/8 sur Imagenette, 128px).
+Valeurs par défaut : celles de l'exemple minimal de LeJEPA, utilisées par la baseline
+(ViT-S/8 sur Imagenette, 128px).
 
 `LeJEPA` est un nn.Module pur (testable sans Lightning) ; `LeJEPAModule` l'enveloppe
 pour le Trainer de Lightning, sans changer le calcul.
 """
 
 from collections.abc import Callable
+from typing import Any
 
 import lightning as L
 import torch
@@ -29,7 +30,9 @@ from torchvision.transforms import v2
 
 from latentopt.data.transforms import IMAGENET_MEAN, IMAGENET_STD
 from latentopt.losses import SIGReg
-from latentopt.models.heads import LinearProbe
+from latentopt.models.contract import Downstream
+from latentopt.models.heads import LinearHead
+from latentopt.models.necks import EmbedNorm
 
 
 class MultiViewTransform:
@@ -37,7 +40,7 @@ class MultiViewTransform:
     augmentations LeJEPA. Signature conjointe des transforms de `data/` : s'utilise avec
     `data.datasets.base.Subset`. Le label ne sert qu'à la sonde en ligne."""
 
-    def __init__(self, size: int = 128, num_views: int = 4):
+    def __init__(self, size: int = 128, num_views: int = 4) -> None:
         self.num_views = num_views
         self.augment = v2.Compose(
             [
@@ -53,7 +56,7 @@ class MultiViewTransform:
             ]
         )
 
-    def __call__(self, img, label: int) -> tuple[Tensor, int]:
+    def __call__(self, img: Any, label: int) -> tuple[Tensor, int]:
         return torch.stack([self.augment(img) for _ in range(self.num_views)]), label
 
 
@@ -72,7 +75,7 @@ class LeJEPA(nn.Module):
         lamb: float = 0.02,
         num_probe_classes: int | None = None,
         sigreg: SIGReg | None = None,
-    ):
+    ) -> None:
         super().__init__()
         self.backbone = backbone
         self.projector = MLP(
@@ -80,8 +83,11 @@ class LeJEPA(nn.Module):
         )
         self.sigreg = sigreg if sigreg is not None else SIGReg()
         self.lamb = lamb
-        self.probe = (
-            LinearProbe(backbone.embed_dim, num_probe_classes) if num_probe_classes else None
+        dim = backbone.embed_dim
+        self.probe = (  # recette linear : LayerNorm sur embed puis projection
+            Downstream(EmbedNorm(dim), LinearHead(dim, num_probe_classes))
+            if num_probe_classes
+            else None
         )
 
     def forward(self, views: Tensor, labels: Tensor | None = None) -> dict[str, Tensor]:
@@ -108,6 +114,7 @@ class LeJEPA(nn.Module):
         return out
 
     def ssl_parameters(self) -> list[nn.Parameter]:
+        """Paramètres optimisés par les losses SSL (hors sonde)."""
         return [*self.backbone.parameters(), *self.projector.parameters()]
 
 
@@ -157,19 +164,19 @@ class LeJEPAModule(L.LightningModule):
     warmup d'un facteur égal au nombre de pas par epoch.
     """
 
-    def __init__(self, model: LeJEPA, make_optimizer: Callable, warmup_epochs: int = 1):
+    def __init__(self, model: LeJEPA, make_optimizer: Callable, warmup_epochs: int = 1) -> None:
         super().__init__()
         self.model = model
         self.make_optimizer = make_optimizer
         self.warmup_epochs = warmup_epochs
 
-    def training_step(self, batch, batch_idx: int) -> Tensor:
+    def training_step(self, batch: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
         views, labels = batch
         out = self.model(views, labels)
         self.log_dict({f"train/{k}": v.detach() for k, v in out.items()}, batch_size=len(views))
         return out["loss"]
 
-    def validation_step(self, batch, batch_idx: int) -> None:
+    def validation_step(self, batch: tuple[Tensor, Tensor], batch_idx: int) -> None:
         if self.model.probe is None:
             return
         x, y = batch
@@ -177,7 +184,7 @@ class LeJEPAModule(L.LightningModule):
         acc = (logits.argmax(1) == y).float().mean()
         self.log("val/probe_acc", acc, batch_size=len(y), prog_bar=True)
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> dict[str, Any]:
         total = self.trainer.estimated_stepping_batches  # tient compte de limit_train_batches
         warmup = total // self.trainer.max_epochs * self.warmup_epochs
         opt, sched = self.make_optimizer(self.model, total_steps=total, warmup_steps=warmup)

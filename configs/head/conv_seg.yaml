@@ -1,0 +1,4 @@
+# Tête conv_seg : logits par pixel sur une carte (neck fpn), segmentation.
+# Fournis à l'exécution : in_dim (neck) et num_classes (tâche).
+_target_: latentopt.models.heads.ConvSegHead
+_partial_: true

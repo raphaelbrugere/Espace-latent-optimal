@@ -20,7 +20,10 @@ multirun/
 /results/*
 !/results/.gitkeep
 lightning_logs/
-wandb/
+# MLflow : une base par run et la base centrale sont dans results/ (déjà ignoré) ;
+# `mlflow ui` lancé sans argument crée ces deux-là à la racine
+mlruns/
+mlflow.db
 features/
 
 # data/ : seuls les trois sous-dossiers et leur .gitkeep sont suivis.

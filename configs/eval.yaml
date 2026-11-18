@@ -1,31 +1,32 @@
-# Config de premier niveau de tools/eval.py : score d'un backbone et de ses têtes.
+# Config de premier niveau de `lo eval` : score de necks + têtes entraînés par `lo train`.
 #
-#   python tools/eval.py name=lejepa_vits8 runs='[results/train/<exp>/<date>/imagenette_cls,...]'
-#   python tools/eval.py name=lejepa_vits8 runs=... split=test      # leaderboard : à la fin seulement
+#   lo eval downstream='[<run>/downstream/pets_seg-fpn-conv_seg-<date>,<run>/downstream/<…>]'
+#   lo eval downstream=... split=test      # score final : à la fin seulement
 #
-# Écrit results/eval/<name>/<split>/<date>/results.json (format de l'arène), lu par
-# reporting/leaderboard.py.
+# Chaque entraînement évalué reçoit un nouveau dossier eval/<split>-<date>/ : results.json,
+# config.yaml, git.txt, lineage.json et un run MLflow eval/<experiment_name> dans son
+# mlflow.db. Rien n'est modifié dans le dossier d'entraînement. Un entraînement est désigné
+# par son chemin, ou par <run>/downstream/<…> : téléchargé depuis le Hub s'il manque en local.
 defaults:
   - cluster: local
   - _self_
 
-name: ??? # nom affiché dans le leaderboard ("baseline" = référence des gains)
-runs: ??? # dossiers de runs de tools/train.py, une tête par tâche, même backbone
-split: val # val pendant le développement ; test seulement pour le leaderboard final
+downstream: ??? # dossiers downstream/<…>, sur un ou plusieurs backbones
+split: val # val pendant le développement ; test seulement pour le score final
 cache_features: true # features du split en cache (data/features/), partagé avec train
 precision: fp16 # fp16 | bf16 | fp32
 batch_size: 64
 
-experiment_name: ${name}
+experiment_name: default
 allow_dirty: true # une évaluation ne s'entraîne pas : pas de garde-fou git
 
 hydra:
   job:
     chdir: false
-  run:
-    dir: ${cluster.results_root}/eval/${name}/${split}/${now:%Y-%m-%d_%H-%M-%S}
+  run: # journal du lancement seulement : les résultats vont dans eval/ de chaque entraînement
+    dir: ${cluster.results_root}/.eval/${now:%Y%m%d_%H%M%S}
   sweep:
-    dir: ${cluster.results_root}/eval/${name}/${split}/${now:%Y-%m-%d_%H-%M-%S}
+    dir: ${cluster.results_root}/.eval/${now:%Y%m%d_%H%M%S}
     subdir: ${hydra.job.num}
   job_logging:
     handlers:

@@ -1,5 +1,5 @@
 # LeJEPA : λ·SIGReg + (1-λ)·invariance sur les projections des V vues.
-# Valeurs de la baseline de projects/lejepa_arena (exemple minimal LeJEPA), sauf la précision.
+# Valeurs de la baseline (exemple minimal LeJEPA), sauf la précision.
 # Tout ce qui change le résultat est ici, jamais dans cluster/.
 name: lejepa
 
@@ -18,7 +18,7 @@ max_steps_per_epoch: null # entier pour raccourcir une epoch (smoke run)
 warmup_epochs: 1
 
 # fp16 par défaut : un job peut tomber sur une RTX 2080 Ti, sans bf16 matériel (docs/CLUSTER.md).
-# bf16 (comme l'arène) seulement sur un nœud sh : gpu_prod_long ou -C sh. fp32 en CPU.
+# bf16 (celle de la baseline) seulement sur un nœud sh : gpu_prod_long ou -C sh. fp32 en CPU.
 precision: fp16 # fp16 | bf16 | fp32
 
 optimizer: # latentopt.methods.build_optimizer ; modèle et nombre de steps fournis à l'exécution

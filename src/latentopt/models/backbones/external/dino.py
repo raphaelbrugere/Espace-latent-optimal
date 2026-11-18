@@ -1,7 +1,7 @@
 """Poids DINO (Caron et al., 2021) du ViT-S/8, auto-supervisés sur ImageNet-1k.
 
 Architecture : `archs.vit.TimmViT`. Ce module ne définit aucun réseau : il télécharge
-les poids (`download`, appelé par tools/prepare_data.py) et les charge en lecture seule
+les poids (`download`, appelé par `lo data prepare`) et les charge en lecture seule
 dans un TimmViT dont il fixe les réglages imposés par ces poids (ViT-S/8, pas de
 projection : `embed` = token CLS, 384).
 
@@ -33,8 +33,9 @@ def download() -> Path:
 
 
 def load_into(model: TimmViT, path: Path) -> None:
+    """Charge strictement le safetensors timm (clés remappées par `checkpoint_filter_fn`)."""
     if not path.exists():
-        raise FileNotFoundError(f"{path} absent : lance `python tools/prepare_data.py {NAME}`")
+        raise FileNotFoundError(f"{path} absent : lance `uv run lo data prepare {NAME}`")
     state_dict = checkpoint_filter_fn(load_file(str(path)), model.vit)
     model.vit.load_state_dict(state_dict, strict=True)
 

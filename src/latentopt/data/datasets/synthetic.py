@@ -13,6 +13,10 @@ from PIL import Image, ImageDraw
 
 from latentopt.data.datasets.base import Subset
 
+# CRITIQUE : nom court du dataset dans les noms de runs et de dépôts Hub. NE JAMAIS LE
+# MODIFIER : il renommerait tous les runs existants. Il doit aussi être DIFFÉRENT de celui
+# de tous les autres datasets (vérifié par tests/data/test_abbreviations.py).
+ABBREV = "synth"
 SIZES = {"train": 1000, "val": 150, "test": 300}
 SEEDS = {"train": 0, "val": 2, "test": 1}
 
@@ -24,14 +28,15 @@ def noise(rng: np.random.RandomState, w: int, h: int) -> Image.Image:
 class Shapes:
     """Classification : la classe fixe la couleur de fond et le nombre d'ellipses."""
 
-    def __init__(self, n: int, num_classes: int, seed: int, size: int = 80):
+    def __init__(self, n: int, num_classes: int, seed: int, size: int = 80) -> None:
         self.n, self.k, self.seed, self.size = n, num_classes, seed, size
         self.palette = np.random.RandomState(1234).randint(30, 225, size=(num_classes, 3))
 
     def __len__(self) -> int:
         return self.n
 
-    def __getitem__(self, i: int):
+    def __getitem__(self, i: int) -> tuple[Image.Image, int]:
+        # Graine unique par (split, index) : `seed` diffère par split, i < 1_000_003.
         rng = np.random.RandomState(self.seed * 1_000_003 + i)
         label = i % self.k
         bg = np.clip(self.palette[label] + rng.randn(3) * 15, 0, 255)
@@ -49,14 +54,14 @@ class Blobs:
 
     palette = [(40, 40, 40), (220, 60, 60), (60, 200, 90)]
 
-    def __init__(self, n: int, seed: int, size: tuple[int, int] = (96, 72)):
+    def __init__(self, n: int, seed: int, size: tuple[int, int] = (96, 72)) -> None:
         self.n, self.seed, self.size = n, seed, size
 
     def __len__(self) -> int:
         return self.n
 
-    def __getitem__(self, i: int):
-        rng = np.random.RandomState(self.seed * 1_000_003 + i)
+    def __getitem__(self, i: int) -> tuple[Image.Image, Image.Image]:
+        rng = np.random.RandomState(self.seed * 1_000_003 + i)  # cf. Shapes
         w0, h0 = self.size
         img, mask = noise(rng, w0, h0), Image.new("L", (w0, h0), 0)
         for _ in range(3):
@@ -73,14 +78,14 @@ class Heads:
 
     palette = [(220, 80, 60), (60, 120, 220)]
 
-    def __init__(self, n: int, seed: int, size: tuple[int, int] = (96, 72)):
+    def __init__(self, n: int, seed: int, size: tuple[int, int] = (96, 72)) -> None:
         self.n, self.seed, self.size = n, seed, size
 
     def __len__(self) -> int:
         return self.n
 
-    def __getitem__(self, i: int):
-        rng = np.random.RandomState(self.seed * 1_000_003 + i)
+    def __getitem__(self, i: int) -> tuple[Image.Image, dict[str, torch.Tensor | int]]:
+        rng = np.random.RandomState(self.seed * 1_000_003 + i)  # cf. Shapes
         w0, h0 = self.size
         img, label = noise(rng, w0, h0), i % 2
         w, h = rng.randint(14, w0 // 2), rng.randint(14, h0 // 2)
@@ -88,6 +93,7 @@ class Heads:
         color = np.clip(np.array(self.palette[label]) + rng.randn(3) * 20, 0, 255)
         ImageDraw.Draw(img).ellipse([x, y, x + w, y + h], fill=tuple(int(c) for c in color))
         box = torch.tensor([x / w0, y / h0, (x + w) / w0, (y + h) / h0])
+        # box en coordonnées normalisées [0, 1] (x0, y0, x1, y1).
         return img, {"box": box, "label": label}
 
 

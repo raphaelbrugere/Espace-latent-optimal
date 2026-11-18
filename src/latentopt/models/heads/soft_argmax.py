@@ -1,11 +1,14 @@
 """Localisation mono-instance par soft-argmax spatial (régression intégrale).
 
-Chaque cellule de la carte au stride le plus proche de 8 émet un logit d'attention,
-un offset sub-cellule du centre et une taille de boîte normalisée (sigmoïdes). La boîte
-est l'espérance de ces prédictions sous la softmax spatiale, et la classe est prédite
-depuis les features poolées par la même attention. Contrairement au décodage argmax
-de CenterNet, tout est dérivable : la tête s'entraîne directement sous L1 + GIoU, sans
-heatmap cible (cf. Sun et al., 2018, Integral Human Pose Regression).
+Chaque cellule de la carte émet un logit d'attention, un offset sub-cellule du centre et
+une taille de boîte normalisée (sigmoïdes). La boîte est l'espérance de ces prédictions
+sous la softmax spatiale, et la classe est prédite depuis les features poolées par la même
+attention. Contrairement au décodage argmax de CenterNet, tout est dérivable : la tête
+s'entraîne directement sous L1 + GIoU, sans heatmap cible (cf. Sun et al., 2018, Integral
+Human Pose Regression).
+
+Recette `soft_argmax` (configs/head/soft_argmax.yaml) : neck `ConvTrunk`, qui lit la carte au
+stride le plus proche de 8, puis cette tête.
 
 Limites : une seule instance par image, et sous une attention multimodale l'espérance
 tombe entre les modes, de même que la taille moyennée.
@@ -13,37 +16,21 @@ tombe entre les modes, de même que la taille moyennée.
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 
 
-class SoftArgmaxHead(nn.Module):
+class SoftArgmaxDecoder(nn.Module):
     """(B, C, H, W) -> {"box": (B, 4) xyxy normalisé dans [0, 1], "logits": (B, K)}."""
 
-    def __init__(
-        self,
-        feature_info: list[dict],
-        num_classes: int,
-        channels: int = 128,
-        target_stride: int = 8,
-    ):
+    in_kind = "map"
+
+    def __init__(self, in_dim: int, num_classes: int) -> None:
         super().__init__()
-        # stride le plus proche de target_stride ; à égalité (ViT simple), le plus profond
-        level = min(reversed(feature_info), key=lambda f: abs(f["stride"] - target_stride))
-        self.name = level["name"]
-        self.in_keys = [self.name]  # entrées lues dans le dict du backbone
+        self.attention = nn.Conv2d(in_dim, 1, kernel_size=1)
+        self.geometry = nn.Conv2d(in_dim, 4, kernel_size=1)  # dx, dy, w, h
+        self.classifier = nn.Linear(in_dim, num_classes)
 
-        self.conv1 = nn.Conv2d(level["channels"], channels, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(channels)
-        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(channels)
-        self.attention = nn.Conv2d(channels, 1, kernel_size=1)
-        self.geometry = nn.Conv2d(channels, 4, kernel_size=1)  # dx, dy, w, h
-        self.classifier = nn.Linear(channels, num_classes)
-
-    def forward(self, feats: dict[str, Tensor]) -> dict[str, Tensor]:
-        x = F.relu(self.bn1(self.conv1(feats[self.name])))
-        x = F.relu(self.bn2(self.conv2(x)))  # (B, C, H, W)
+    def forward(self, x: Tensor) -> dict[str, Tensor]:
         _, _, H, W = x.shape
 
         weights = self.attention(x).flatten(1).softmax(dim=1)  # (B, HW)

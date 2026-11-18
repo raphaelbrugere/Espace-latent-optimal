@@ -8,7 +8,9 @@ from latentopt.losses import resize_logits
 
 
 class Top1:
-    def __init__(self):
+    """Précision top-1 : logits (B, K), cibles (B,) d'indices de classe."""
+
+    def __init__(self) -> None:
         self.correct = self.total = 0
 
     def update(self, logits: Tensor, y: Tensor) -> None:
@@ -22,7 +24,7 @@ class Top1:
 class BalancedAccuracy:
     """Rappel moyen par classe ; seules les classes présentes comptent."""
 
-    def __init__(self, num_classes: int):
+    def __init__(self, num_classes: int) -> None:
         self.hit, self.count = torch.zeros(num_classes), torch.zeros(num_classes)
 
     def update(self, logits: Tensor, y: Tensor) -> None:
@@ -42,7 +44,7 @@ class MeanIoU:
     """mIoU dataset-level (intersections et unions sommées avant division), calculé à la
     résolution native de chaque masque."""
 
-    def __init__(self, num_classes: int):
+    def __init__(self, num_classes: int) -> None:
         self.k = num_classes
         self.inter, self.union = torch.zeros(num_classes), torch.zeros(num_classes)
 
@@ -60,12 +62,14 @@ class MeanIoU:
 
 
 class LocalizationAccuracy:
-    """Correct si la classe est juste ET IoU >= seuil. Métrique principale : moyenne sur
+    """Boîtes [x1, y1, x2, y2] normalisées dans [0, 1] (`out["box"]`, `y["box"]`).
+
+    Correct si la classe est juste ET IoU >= seuil. Métrique principale : moyenne sur
     les seuils 0.50:0.05:0.95 (à la COCO), qui récompense la précision des boîtes."""
 
     thresholds = torch.arange(0.5, 0.96, 0.05)
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.ious, self.correct_cls = [], []
 
     def update(self, out: dict[str, Tensor], y: dict[str, Tensor]) -> None:

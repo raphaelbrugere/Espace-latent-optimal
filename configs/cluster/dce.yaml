@@ -2,8 +2,8 @@
 # DCE de CentraleSupélec (voir docs/CLUSTER.md). À lancer depuis la passerelle, avec -m :
 # sans -m, Hydra n'utilise pas le launcher et le run tournerait sur la passerelle.
 #
-#   python tools/pretrain.py experiment=<nom> cluster=dce -m
-#   python tools/pretrain.py experiment=smoke cluster=dce hydra.launcher.partition=gpu_inter hydra.launcher.timeout_min=120 -m
+#   lo pretrain experiment=<nom> cluster=dce -m
+#   lo pretrain experiment=smoke cluster=dce hydra.launcher.partition=gpu_inter hydra.launcher.timeout_min=120 -m
 defaults:
   - override /hydra/launcher: submitit_slurm
 
@@ -11,6 +11,7 @@ cluster:
   name: dce
   data_root: ${oc.env:DATA_ROOT,${project_root:}/data}
   results_root: ${oc.env:OUTPUT_ROOT,${project_root:}/results}
+  mlflow: true # base MLflow par run (<run>/mlflow.db) ; false : désactivé
   num_workers: 6 # 8 cœurs par nœud : en laisser pour le processus principal
   device: cuda
   progress_bar: false # la barre de progression pollue les logs Slurm ; suivre run.log

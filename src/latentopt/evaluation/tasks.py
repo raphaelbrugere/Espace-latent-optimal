@@ -1,15 +1,16 @@
-"""Registre des tâches downstream : dataset, transforms, loss, métrique, budget de tête.
+"""Registre des tâches downstream : dataset, transforms, loss, métrique.
 
-Reprend la small league de `projects/lejepa_arena` (entrée 128px, mêmes splits, mêmes
-transforms, métriques et budgets), plus trois tâches synthétiques pour le smoke run (64px).
+Cinq tâches de protocole (entrée 128px, splits figés, transforms et métriques fixes, voir
+docs/DATASETS.md), plus trois tâches synthétiques pour le smoke run (64px).
 
-`default_head` et `epochs` forment la recette de la baseline (train_head.py de l'arène) :
-choix par défaut, remplaçables (`head=...`, `epochs=...`), contrairement au protocole.
+`default_neck`, `default_head` et `epochs` forment la recette de la baseline : choix par
+défaut, remplaçables (`neck=...`, `head=...`, `epochs=...`), contrairement au protocole.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -20,75 +21,84 @@ from latentopt.evaluation import metrics as M
 from latentopt.losses import detection_loss, segmentation_loss
 
 SIZE, SMOKE_SIZE = 128, 64
-CLS_HEAD_MAX_PARAMS = 2_000_000
-DENSE_HEAD_MAX_PARAMS = 3_000_000
 
 
 @dataclass(frozen=True)
 class Task:
+    """Protocole d'une tâche aval : données, transforms, perte et métrique.
+
+    Les tâches sont enregistrées dans `TASKS` ; `get_task(nom)` les retrouve."""
+
     name: str
     num_classes: int
     primary_metric: str
-    head_max_params: int
     build: Callable  # (split, transform) -> Dataset
     eval_transform: Callable
     train_transform: Callable  # augmentation minimale de la baseline
     loss: Callable
     metric: Callable  # () -> métrique vierge
-    default_head: str  # configs/head/<nom>.yaml
+    default_neck: str  # neck de la baseline : configs/neck/<nom>.yaml
+    default_head: str  # tête de la baseline : configs/head/<nom>.yaml
     epochs: int  # epochs de la baseline
     collate_fn: Callable | None = None  # split d'éval seulement
 
-    def dataset(self, split: str, train: bool = False):
+    def dataset(self, split: str, train: bool = False) -> Any:
         return self.build(split, self.train_transform if train else self.eval_transform)
 
 
-def classification(name, build, num_classes, transform, epochs, metric=None) -> Task:
+def classification(
+    name: str,
+    build: Callable,
+    num_classes: int,
+    transform: Callable,
+    epochs: int,
+    metric: str | None = None,
+) -> Task:
     """Pas d'augmentation à l'entraînement (baseline) : train = éval."""
     balanced = metric == "balanced_acc"
     return Task(
         name=name,
         num_classes=num_classes,
         primary_metric=metric or "top1",
-        head_max_params=CLS_HEAD_MAX_PARAMS,
         build=build,
         eval_transform=transform,
         train_transform=transform,
         loss=F.cross_entropy,
         metric=partial(M.BalancedAccuracy, num_classes) if balanced else M.Top1,
+        default_neck="embed_norm",
         default_head="linear",
         epochs=epochs,
     )
 
 
-def segmentation(name, build, size) -> Task:
+def segmentation(name: str, build: Callable, size: int) -> Task:
     return Task(
         name=name,
         num_classes=3,
         primary_metric="miou",
-        head_max_params=DENSE_HEAD_MAX_PARAMS,
         build=build,
         eval_transform=T.SegmentationTransform(size, native_mask=True),
         train_transform=T.SegmentationTransform(size, native_mask=False, hflip=0.5),
         loss=segmentation_loss,
         metric=partial(M.MeanIoU, 3),
-        default_head="fpn",
+        default_neck="fpn",
+        default_head="conv_seg",
         epochs=30,
         collate_fn=T.collate_native,
     )
 
 
-def detection(name, build, size) -> Task:
+def detection(name: str, build: Callable, size: int) -> Task:
     return Task(
         name=name,
         num_classes=2,
         primary_metric="loc_acc",
-        head_max_params=DENSE_HEAD_MAX_PARAMS,
         build=build,
         eval_transform=T.DetectionTransform(size),
         train_transform=T.DetectionTransform(size, hflip=0.5),
         loss=detection_loss,
         metric=M.LocalizationAccuracy,
+        default_neck="conv_trunk",
         default_head="soft_argmax",
         epochs=30,
     )
@@ -117,7 +127,7 @@ def get_task(name: str) -> Task:
     return TASKS[name]
 
 
-def to_device(y, device):
+def to_device(y: Any, device: torch.device) -> Any:
     """Déplace des cibles sur `device`, quelle que soit leur structure (tenseur, liste, dict)."""
     if torch.is_tensor(y):
         return y.to(device, non_blocking=True)
@@ -128,7 +138,7 @@ def to_device(y, device):
     return y
 
 
-def to_float(out):
+def to_float(out: Any) -> Any:
     """Sorties de tête en fp32 (après autocast), quelle que soit leur structure."""
     if torch.is_tensor(out):
         return out.float()

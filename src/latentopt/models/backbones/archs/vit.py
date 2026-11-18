@@ -18,6 +18,11 @@ from torch import Tensor
 
 
 class TimmViT(nn.Module):
+    """`blocks` : indices (0-based) des blocs dont on expose la carte, nommée `block{i+1}`.
+
+    `forward` renvoie ces cartes (B, C, H/stride, W/stride) plus `embed` (B, embed_dim).
+    """
+
     def __init__(
         self,
         arch: str = "vit_small_patch8_224",
@@ -26,7 +31,7 @@ class TimmViT(nn.Module):
         blocks: tuple[int, ...] = (2, 5, 8, 11),
         drop_path_rate: float = 0.0,
         grad_checkpointing: bool = False,
-    ):
+    ) -> None:
         super().__init__()
         self.vit = timm.create_model(
             arch,
