@@ -39,7 +39,7 @@ def test_check_hflip_accepts_probabilities(p):
 
 @pytest.mark.parametrize("p", [True, False, -0.1, 1.5])
 def test_check_hflip_rejects_bools_and_out_of_range(p):
-    with pytest.raises(ValueError, match="probabilité"):
+    with pytest.raises(ValueError, match="probabilite"):
         T.check_hflip(p)
 
 
@@ -51,10 +51,10 @@ def test_center_crop_gives_square(w, h):
 
 def test_square_resize_is_anisotropic_without_crop():
     img = Image.new("RGB", (100, 50), (0, 0, 0))
-    img.paste((255, 255, 255), (0, 0, 10, 50))  # bande blanche à gauche, 10 % de la largeur
+    img.paste((255, 255, 255), (0, 0, 10, 50))  # bande blanche a gauche, 10 % de la largeur
     x, _ = T.SquareResize(20)(img, 0)
     assert x.shape == (3, 20, 20)
-    # sans crop, la bande reste présente sur toute la hauteur
+    # sans crop, la bande reste presente sur toute la hauteur
     assert (x[0, :, 0] > 0).all()
 
 
@@ -68,7 +68,7 @@ def test_segmentation_eval_keeps_native_mask():
 def test_segmentation_train_resizes_mask_with_nearest():
     _, m = T.SegmentationTransform(32, native_mask=False)(rgb(50, 40), left_half_mask(50, 40))
     assert m.shape == (32, 32)
-    assert set(m.unique().tolist()) <= {0, 2}  # nearest : aucune valeur interpolée
+    assert set(m.unique().tolist()) <= {0, 2}  # nearest : aucune valeur interpolee
 
 
 def test_segmentation_hflip_flips_image_and_mask_together():
@@ -94,7 +94,7 @@ def test_detection_hflip_mirrors_box_and_does_not_mutate_input():
     assert torch.allclose(t1["box"], torch.tensor([0.6, 0.2, 0.9, 0.9]))
     assert torch.equal(x1, x0.flip(-1))
     assert torch.equal(target["box"], torch.tensor([0.1, 0.2, 0.4, 0.9]))
-    # le retournement reste une boîte valide (x1 < x2)
+    # le retournement reste une boite valide (x1 < x2)
     assert t1["box"][0] < t1["box"][2]
 
 

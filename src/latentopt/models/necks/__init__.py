@@ -1,4 +1,4 @@
-"""Necks : du dict de features du backbone à ce que lit la tête, entraînés avec elle.
+"""Necks : du dict de features du backbone a ce que lit la tete, entraines avec elle.
 
 Un neck par recette d'origine (configs/head/) : `EmbedNorm` (linear), `FPNNeck` (fpn),
 `ConvTrunk` (soft_argmax)."""

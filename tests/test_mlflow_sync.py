@@ -1,5 +1,5 @@
-"""lo mlflow sync : recopie fidèle des runs dans la base d'équipe, sans doublon, depuis
-plusieurs dossiers de résultats (un par membre de l'équipe) et les dépôts du Hub."""
+"""lo mlflow sync : recopie fidele des runs dans la base d'equipe, sans doublon, depuis
+plusieurs dossiers de resultats (un par membre de l'equipe) et les depots du Hub."""
 
 import shutil
 from types import SimpleNamespace
@@ -16,7 +16,7 @@ GIT = {"commit": "abc", "branch": "main", "dirty": False, "changed": []}
 
 
 def make_run(results, stage, exp, name, status="success", losses=(1.0, 0.5, 0.25)):
-    """Un dossier de run complet : fichiers légers + base MLflow du run."""
+    """Un dossier de run complet : fichiers legers + base MLflow du run."""
     cfg = OmegaConf.create(
         {"cluster": {"name": "local", "results_root": results.as_posix(), "mlflow": True},
          "experiment_name": exp, "allow_dirty": False, "seed": 0}
@@ -98,7 +98,7 @@ def test_running_runs_are_skipped_unless_asked(results):
 
 
 def test_sync_merges_several_results_dirs_into_one_experiment(tmp_path):
-    """Les runs de deux membres de l'équipe, même expérience : une seule expérience centrale."""
+    """Les runs de deux membres de l'equipe, meme experience : une seule experience centrale."""
     mine, theirs = tmp_path / "moi" / "results", tmp_path / "collegue" / "results"
     make_run(mine, "pretrain", "lejepa", "2026-01-01")
     make_run(theirs, "pretrain", "lejepa", "2026-01-02")
@@ -129,19 +129,19 @@ def test_default_team_database_is_in_data_root(tmp_path, monkeypatch, capsys):
     mlflow_sync.main(["--results", str(mine), str(theirs), "--no-hub"])
     assert (tmp_path / "data" / "mlflow.db").exists()
     assert not (mine / "mlflow.db").exists() and not (theirs / "mlflow.db").exists()
-    assert repo_db.exists() == existed  # la base du dépôt n'est jamais touchée
-    assert "2 importés" in capsys.readouterr().out
+    assert repo_db.exists() == existed  # la base du depot n'est jamais touchee
+    assert "2 importes" in capsys.readouterr().out
 
 
 def test_main_prints_summary(results, capsys):
     make_run(results, "eval", "smoke", "val/2026-01-01")
     mlflow_sync.main(["--results", str(results), "--db", str(results / "central.db"), "--no-hub"])
-    assert "1 importés, 0 déjà présents, 0 en cours ignorés" in capsys.readouterr().out
+    assert "1 importes, 0 deja presents, 0 en cours ignores" in capsys.readouterr().out
 
 
 def test_a_run_both_local_and_on_the_hub_is_imported_once(tmp_path):
-    """Même base à deux endroits (dossier de run et sa copie du Hub) : un seul run central,
-    y compris dans une même synchronisation."""
+    """Meme base a deux endroits (dossier de run et sa copie du Hub) : un seul run central,
+    y compris dans une meme synchronisation."""
     results = tmp_path / "results"
     run_dir = make_run(results, "pretrain", "exp", "a")
     copy = tmp_path / "mlflow_hub" / "a"

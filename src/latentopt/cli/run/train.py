@@ -1,19 +1,19 @@
-"""Entraînement d'un neck et d'une tête sur un backbone gelé (configs/train.yaml).
+"""Entrainement d'un neck et d'une tete sur un backbone gele (configs/train.yaml).
 
     lo train backbone=from_run backbone.run=<run> task=pets_seg
     lo train backbone=from_run backbone.run=<run> task=imagenette_cls,pets_seg -m
     lo train backbone=from_run backbone.run=<run> task=pets_det \
         neck_from=pets_seg-fpn-conv_seg-20261117_090000
 
-Le run écrit dans results/<run>/downstream/<tâche>-<neck>-<tête>-<AAAAMMJJ_HHMMSS>/
+Le run ecrit dans results/<run>/downstream/<tache>-<neck>-<tete>-<AAAAMMJJ_HHMMSS>/
 (latentopt/hub.py) : neck.pt (poids, empreintes du backbone et du neck), head.pt (poids de
-la tête seule, empreintes du backbone et du neck, graine), README.md, results.json (scores
-val, paramètres du neck et de la tête séparés), plus le dossier de run commun ; suivi dans
+la tete seule, empreintes du backbone et du neck, graine), README.md, results.json (scores
+val, parametres du neck et de la tete separes), plus le dossier de run commun ; suivi dans
 MLflow (train/<experiment_name>). Avec `neck_from`, pas de neck.pt : le neck repris reste
-gelé, la tête seule apprend, et head.pt et results.json désignent le dossier du neck.
+gele, la tete seule apprend, et head.pt et results.json designent le dossier du neck.
 
-Par défaut (cache_features=true), les features du backbone sont extraites une fois dans
-data/features/ (evaluation/features.py), puis neck et tête s'entraînent dessus.
+Par defaut (cache_features=true), les features du backbone sont extraites une fois dans
+data/features/ (evaluation/features.py), puis neck et tete s'entrainent dessus.
 """
 
 import json
@@ -52,9 +52,9 @@ log = logging.getLogger("train")
 
 
 def neck_dir(neck_from: str, run_dir: Path) -> Path:
-    """Dossier du neck repris : `<tâche>-<neck>-<tête>-<date>` dans downstream/ du backbone
-    de ce run, sinon un chemin ou un nom complet (<run>/downstream/<…>, téléchargé s'il
-    manque). Il doit contenir neck.pt : un entraînement sur neck repris n'en a pas."""
+    """Dossier du neck repris : `<tache>-<neck>-<tete>-<date>` dans downstream/ du backbone
+    de ce run, sinon un chemin ou un nom complet (<run>/downstream/<...>, telecharge s'il
+    manque). Il doit contenir neck.pt : un entrainement sur neck repris n'en a pas."""
     if "/" not in neck_from and "\\" not in neck_from:
         hub.parse_downstream(neck_from)
         folder = hub.run_root(run_dir) / hub.DOWNSTREAM / neck_from
@@ -64,14 +64,14 @@ def neck_dir(neck_from: str, run_dir: Path) -> Path:
         hint = ""
         if (folder / "results.json").exists():
             origin = json.loads((folder / "results.json").read_text(encoding="utf-8"))["neck"]
-            hint = f" : neck repris de {origin}, le désigner directement"
+            hint = f" : neck repris de {origin}, le designer directement"
         raise FileNotFoundError(f"{folder / 'neck.pt'} absent{hint}")
     return folder
 
 
 def fill_defaults(cfg: DictConfig) -> None:
-    """neck, head et epochs absents -> ceux de la baseline de la tâche (écrits dans la config).
-    Avec `neck_from` (chemin résolu), la config du neck est celle enregistrée dans son neck.pt."""
+    """neck, head et epochs absents -> ceux de la baseline de la tache (ecrits dans la config).
+    Avec `neck_from` (chemin resolu), la config du neck est celle enregistree dans son neck.pt."""
     task = get_task(cfg.task)
     with open_dict(cfg):
         if cfg.get("neck_from"):
@@ -114,16 +114,16 @@ def cached_datasets(
 def build(cfg: DictConfig) -> tuple[FrozenBackboneModule, DataLoader, DataLoader]:
     """Config -> module Lightning et DataLoaders (testable).
 
-    Ordre fixe : backbone construit, puis graine, puis neck et tête (init) ; la graine
-    ne dépend donc pas du backbone. L'extraction des features se fait avant la graine, pour
-    ne décaler ni l'init ni l'ordre des données. Avec `neck_from`, le neck reçoit ses poids
-    enregistrés (ValueError s'ils ont été appris sur un autre backbone) et reste gelé.
+    Ordre fixe : backbone construit, puis graine, puis neck et tete (init) ; la graine
+    ne depend donc pas du backbone. L'extraction des features se fait avant la graine, pour
+    ne decaler ni l'init ni l'ordre des donnees. Avec `neck_from`, le neck recoit ses poids
+    enregistres (ValueError s'ils ont ete appris sur un autre backbone) et reste gele.
     """
     task = get_task(cfg.task)
-    L.seed_everything(cfg.seed, workers=False)  # backbone à poids aléatoires : reproductible
+    L.seed_everything(cfg.seed, workers=False)  # backbone a poids aleatoires : reproductible
     backbone = instantiate(cfg.backbone)
     if cfg.cache_features:
-        # avant la graine, donc jeté : seulement pour connaître les clés lues
+        # avant la graine, donc jete : seulement pour connaitre les cles lues
         keys = recipe.build_neck(cfg.neck, backbone).in_keys
         train_ds, val_ds = cached_datasets(cfg, task, backbone, keys)
         workers, val_collate = 0, collate(native_targets=task.collate_fn is not None)
@@ -153,7 +153,7 @@ def build(cfg: DictConfig) -> tuple[FrozenBackboneModule, DataLoader, DataLoader
 
 
 def names(task: Task, neck_from: str | None) -> tuple[str, str]:
-    """Noms du neck et de la tête du run : choix `neck=` / `head=`, sinon ceux de la tâche ;
+    """Noms du neck et de la tete du run : choix `neck=` / `head=`, sinon ceux de la tache ;
     avec `neck_from`, le nom du neck repris."""
     choices = HydraConfig.get().runtime.choices
 
@@ -168,7 +168,7 @@ def names(task: Task, neck_from: str | None) -> tuple[str, str]:
 @hydra.main(version_base="1.3", config_path=CONFIGS_DIR, config_name="train")
 def main(cfg: DictConfig) -> None:
     os.environ["DATA_ROOT"] = cfg.cluster.data_root
-    os.environ["OUTPUT_ROOT"] = cfg.cluster.results_root  # runs désignés par leur nom (hub.locate)
+    os.environ["OUTPUT_ROOT"] = cfg.cluster.results_root  # runs designes par leur nom (hub.locate)
     run_dir = Path(HydraConfig.get().runtime.output_dir)
     if cfg.get("neck_from"):
         with open_dict(cfg):
@@ -181,9 +181,9 @@ def main(cfg: DictConfig) -> None:
     module, train, val = build(cfg)
     task, head = module.task, module.head
     neck_name, head_name = names(task, cfg.get("neck_from"))
-    log.info("%s : neck %s (%s, %s paramètres%s), tête %s (%s, %s paramètres)",
+    log.info("%s : neck %s (%s, %s parametres%s), tete %s (%s, %s parametres)",
              task.name, neck_name, type(head.neck).__name__, f"{count_params(head.neck):,}",
-             ", gelé" if module.freeze_neck else "", head_name, type(head.head).__name__,
+             ", gele" if module.freeze_neck else "", head_name, type(head.head).__name__,
              f"{count_params(head.head):,}")  # fmt: skip
     trainer = L.Trainer(
         max_epochs=cfg.epochs,
@@ -208,15 +208,15 @@ def main(cfg: DictConfig) -> None:
     if module.freeze_neck:
         folder = Path(cfg.neck_from)
         neck_sha = weights_hash(neck)
-    else:  # neck appris avec la tête : dans le même dossier
+    else:  # neck appris avec la tete : dans le meme dossier
         folder = run_dir
         neck_cfg = OmegaConf.to_container(cfg.neck, resolve=True)
         neck_sha = save_neck(neck, run_dir / "neck.pt", backbone, seed=cfg.seed, config=neck_cfg,
                              name=neck_name, task=task.name)  # fmt: skip
-    try:  # dossier du neck relatif au dossier du backbone : downstream/<…>
+    try:  # dossier du neck relatif au dossier du backbone : downstream/<...>
         root = hub.run_root(run_dir)
         neck_ref = folder.resolve().relative_to(root.resolve()).as_posix()
-    except ValueError:  # hors de l'arborescence (hydra.run.dir surchargé, neck d'ailleurs)
+    except ValueError:  # hors de l'arborescence (hydra.run.dir surcharge, neck d'ailleurs)
         neck_ref = folder.resolve().as_posix()
     sha = save_head(head.head.cpu(), run_dir / "head.pt", backbone, neck, seed=cfg.seed,
                     val=scores, epochs=cfg.epochs, task=task.name, neck_dir=neck_ref)  # fmt: skip
@@ -239,7 +239,7 @@ def main(cfg: DictConfig) -> None:
         "git_dirty": git["dirty"],
     }
     hub.write_card(run_dir, results)
-    # en dernier : marque le run terminé (hub.parts)
+    # en dernier : marque le run termine (hub.parts)
     (run_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     run.mlflow_finish(mlflow, results)
     log.info("%s : val %s = %.4f", task.name, task.primary_metric, scores[task.primary_metric])

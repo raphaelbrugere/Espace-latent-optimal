@@ -1,11 +1,11 @@
-"""Reproductibilité (P3 du cours) : même config + même graine => mêmes poids, sur CPU.
+"""Reproductibilite (P3 du cours) : meme config + meme graine => memes poids, sur CPU.
 
 Les runs passent par les fonctions `build` des commandes lo (celles des vrais runs), avec un
-petit ViT et quelques pas sur données synthétiques. On compare les poids, pas un score :
-deux modèles différents peuvent avoir la même métrique.
+petit ViT et quelques pas sur donnees synthetiques. On compare les poids, pas un score :
+deux modeles differents peuvent avoir la meme metrique.
 
-Sur GPU, l'égalité exacte n'est pas garantie (sommes en ordre variable) : ces tests
-fixent la référence CPU.
+Sur GPU, l'egalite exacte n'est pas garantie (sommes en ordre variable) : ces tests
+fixent la reference CPU.
 """
 
 import importlib
@@ -88,14 +88,14 @@ def test_head_training_depends_on_seed(isolated_data):
 
 
 def test_feature_cache_gives_same_head_as_on_the_fly(isolated_data):
-    """Le cache ne change pas l'entraînement : même init, même ordre, mêmes features."""
+    """Le cache ne change pas l'entrainement : meme init, meme ordre, memes features."""
     cached = train_head(isolated_data, "cache_features=true")
     live = train_head(isolated_data, "cache_features=false")
     assert same_weights(cached.head, live.head, atol=1e-5)
 
 
 def test_backbone_seed_fixes_random_init(isolated_data):
-    """Backbone à poids aléatoires : même graine, même backbone (évalué avec ses têtes)."""
+    """Backbone a poids aleatoires : meme graine, meme backbone (evalue avec ses tetes)."""
     tool = load_tool("train")
     cfg = config("train", ["experiment=smoke_train", *TINY, "cache_features=false"], isolated_data)
     tool.fill_defaults(cfg)

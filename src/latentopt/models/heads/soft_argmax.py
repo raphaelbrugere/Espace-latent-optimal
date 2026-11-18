@@ -1,17 +1,17 @@
-"""Localisation mono-instance par soft-argmax spatial (régression intégrale).
+"""Localisation mono-instance par soft-argmax spatial (regression integrale).
 
-Chaque cellule de la carte émet un logit d'attention, un offset sub-cellule du centre et
-une taille de boîte normalisée (sigmoïdes). La boîte est l'espérance de ces prédictions
-sous la softmax spatiale, et la classe est prédite depuis les features poolées par la même
-attention. Contrairement au décodage argmax de CenterNet, tout est dérivable : la tête
-s'entraîne directement sous L1 + GIoU, sans heatmap cible (cf. Sun et al., 2018, Integral
+Chaque cellule de la carte emet un logit d'attention, un offset sub-cellule du centre et
+une taille de boite normalisee (sigmoides). La boite est l'esperance de ces predictions
+sous la softmax spatiale, et la classe est predite depuis les features poolees par la meme
+attention. Contrairement au decodage argmax de CenterNet, tout est derivable : la tete
+s'entraine directement sous L1 + GIoU, sans heatmap cible (cf. Sun et al., 2018, Integral
 Human Pose Regression).
 
 Recette `soft_argmax` (configs/head/soft_argmax.yaml) : neck `ConvTrunk`, qui lit la carte au
-stride le plus proche de 8, puis cette tête.
+stride le plus proche de 8, puis cette tete.
 
-Limites : une seule instance par image, et sous une attention multimodale l'espérance
-tombe entre les modes, de même que la taille moyennée.
+Limites : une seule instance par image, et sous une attention multimodale l'esperance
+tombe entre les modes, de meme que la taille moyennee.
 """
 
 import torch
@@ -20,7 +20,7 @@ from torch import Tensor
 
 
 class SoftArgmaxDecoder(nn.Module):
-    """(B, C, H, W) -> {"box": (B, 4) xyxy normalisé dans [0, 1], "logits": (B, K)}."""
+    """(B, C, H, W) -> {"box": (B, 4) xyxy normalise dans [0, 1], "logits": (B, K)}."""
 
     in_kind = "map"
 
@@ -42,7 +42,7 @@ class SoftArgmaxDecoder(nn.Module):
         center_x = (cols.flatten() + dx) / W
         center_y = (rows.flatten() + dy) / H
 
-        # espérance sous l'attention
+        # esperance sous l'attention
         cx, cy, w, h = ((v * weights).sum(dim=1) for v in (center_x, center_y, width, height))
         box = torch.stack([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], dim=1).clamp(0, 1)
 

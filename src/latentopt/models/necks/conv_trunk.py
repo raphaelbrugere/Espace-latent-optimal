@@ -1,4 +1,4 @@
-"""Neck convolutif sur une seule carte du backbone : tronc de la détection."""
+"""Neck convolutif sur une seule carte du backbone : tronc de la detection."""
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,10 +17,10 @@ class ConvTrunk(nn.Module):
         self, feature_info: list[dict], channels: int = 128, target_stride: int = 8
     ) -> None:
         super().__init__()
-        # stride le plus proche de target_stride ; à égalité (ViT simple), le plus profond
+        # stride le plus proche de target_stride ; a egalite (ViT simple), le plus profond
         level = min(reversed(feature_info), key=lambda f: abs(f["stride"] - target_stride))
         self.name = level["name"]
-        self.in_keys = [self.name]  # entrées lues dans le dict du backbone
+        self.in_keys = [self.name]  # entrees lues dans le dict du backbone
         self.out_dim = channels
 
         self.conv1 = nn.Conv2d(level["channels"], channels, kernel_size=3, padding=1)

@@ -1,14 +1,14 @@
-"""Splits figés : calculés une fois, commités dans `splits/<dataset>.json`.
+"""Splits figes : calcules une fois, commites dans `splits/<dataset>.json`.
 
-Les splits dérivés (holdout, stratifié) sont stockés par identifiant stable (chemin
-relatif, nom de fichier, ligne d'une révision HF épinglée), jamais par indice : un
-changement d'ordre de listage côté torchvision ou HF ne peut pas les déplacer.
+Les splits derives (holdout, stratifie) sont stockes par identifiant stable (chemin
+relatif, nom de fichier, ligne d'une revision HF epinglee), jamais par indice : un
+changement d'ordre de listage cote torchvision ou HF ne peut pas les deplacer.
 
-Les splits officiels (Flowers-102, tests d'Imagenette et de Pets) passent par le même
-mécanisme : le JSON liste les identifiants que la définition officielle du dataset donne.
+Les splits officiels (Flowers-102, tests d'Imagenette et de Pets) passent par le meme
+mecanisme : le JSON liste les identifiants que la definition officielle du dataset donne.
 
-Chaque dataset définit son calcul dans son propre module (`freeze_splits`), appelé par
-`build` : un JSON existant est lu tel quel, sinon il est créé. `freeze` ne le réécrit
+Chaque dataset definit son calcul dans son propre module (`freeze_splits`), appele par
+`build` : un JSON existant est lu tel quel, sinon il est cree. `freeze` ne le reecrit
 qu'avec `force`.
 """
 
@@ -51,37 +51,37 @@ def stratified(
 
 
 def save(name: str, splits: dict[str, list[int]], ids: Sequence[str], **meta: Any) -> Path:
-    """Convertit des indices en identifiants et écrit le JSON (un id par ligne)."""
+    """Convertit des indices en identifiants et ecrit le JSON (un id par ligne)."""
     named = {split: sorted(str(ids[i]) for i in idx) for split, idx in splits.items()}
     path = SPLITS_DIR / f"{name}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"dataset": name, **meta, "splits": named}
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
-    os.replace(tmp, path)  # atomique : un job concurrent ne lit jamais un JSON à moitié écrit
+    os.replace(tmp, path)  # atomique : un job concurrent ne lit jamais un JSON a moitie ecrit
     return path
 
 
 def freeze(name: str, compute: Callable[[], Computed], force: bool = False) -> Path:
-    """Écrit `splits/<name>.json` avec `compute()` = (indices par split, ids, méta).
+    """Ecrit `splits/<name>.json` avec `compute()` = (indices par split, ids, meta).
 
-    Un JSON existant est conservé tel quel, sans appeler `compute` (donc sans toucher au
-    dataset) : le réécrire change les ensembles, et avec eux la comparabilité des scores.
-    `force` ne sert qu'à le faire exprès."""
+    Un JSON existant est conserve tel quel, sans appeler `compute` (donc sans toucher au
+    dataset) : le reecrire change les ensembles, et avec eux la comparabilite des scores.
+    `force` ne sert qu'a le faire expres."""
     path = SPLITS_DIR / f"{name}.json"
     existed = path.exists()
     if existed and not force:
-        log.info("splits %s : déjà figés, conservés (%s)", name, path)
+        log.info("splits %s : deja figes, conserves (%s)", name, path)
         return path
     parts, ids, meta = compute()
     path = save(name, parts, ids, **meta)
     sizes = ", ".join(f"{k} {len(v)}" for k, v in parts.items())
-    log.info("splits %s : %s (%s) -> %s", name, "réécrits" if existed else "créés", sizes, path)
+    log.info("splits %s : %s (%s) -> %s", name, "reecrits" if existed else "crees", sizes, path)
     return path
 
 
 def load(name: str) -> dict[str, Any]:
-    """JSON figé du dataset ; `FileNotFoundError` si les splits n'ont pas été gelés."""
+    """JSON fige du dataset ; `FileNotFoundError` si les splits n'ont pas ete geles."""
     path = SPLITS_DIR / f"{name}.json"
     if not path.exists():
         raise FileNotFoundError(f"{path} absent : lance `uv run lo data prepare`")
@@ -89,7 +89,7 @@ def load(name: str) -> dict[str, Any]:
 
 
 def indices(name: str, split: str, ids: Sequence[str]) -> list[int]:
-    """Indices, dans la source chargée, des identifiants du split figé."""
+    """Indices, dans la source chargee, des identifiants du split fige."""
     position = {str(i): k for k, i in enumerate(ids)}
     wanted = load(name)["splits"][split]
     missing = [i for i in wanted if i not in position]

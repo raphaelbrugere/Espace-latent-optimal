@@ -1,4 +1,4 @@
-"""Métriques accumulées par batch : `update(out, target)` puis `compute() -> dict`."""
+"""Metriques accumulees par batch : `update(out, target)` puis `compute() -> dict`."""
 
 import torch
 from torch import Tensor
@@ -8,7 +8,7 @@ from latentopt.losses import resize_logits
 
 
 class Top1:
-    """Précision top-1 : logits (B, K), cibles (B,) d'indices de classe."""
+    """Precision top-1 : logits (B, K), cibles (B,) d'indices de classe."""
 
     def __init__(self) -> None:
         self.correct = self.total = 0
@@ -22,7 +22,7 @@ class Top1:
 
 
 class BalancedAccuracy:
-    """Rappel moyen par classe ; seules les classes présentes comptent."""
+    """Rappel moyen par classe ; seules les classes presentes comptent."""
 
     def __init__(self, num_classes: int) -> None:
         self.hit, self.count = torch.zeros(num_classes), torch.zeros(num_classes)
@@ -41,8 +41,8 @@ class BalancedAccuracy:
 
 
 class MeanIoU:
-    """mIoU dataset-level (intersections et unions sommées avant division), calculé à la
-    résolution native de chaque masque."""
+    """mIoU dataset-level (intersections et unions sommees avant division), calcule a la
+    resolution native de chaque masque."""
 
     def __init__(self, num_classes: int) -> None:
         self.k = num_classes
@@ -62,10 +62,10 @@ class MeanIoU:
 
 
 class LocalizationAccuracy:
-    """Boîtes [x1, y1, x2, y2] normalisées dans [0, 1] (`out["box"]`, `y["box"]`).
+    """Boites [x1, y1, x2, y2] normalisees dans [0, 1] (`out["box"]`, `y["box"]`).
 
-    Correct si la classe est juste ET IoU >= seuil. Métrique principale : moyenne sur
-    les seuils 0.50:0.05:0.95 (à la COCO), qui récompense la précision des boîtes."""
+    Correct si la classe est juste ET IoU >= seuil. Metrique principale : moyenne sur
+    les seuils 0.50:0.05:0.95 (a la COCO), qui recompense la precision des boites."""
 
     thresholds = torch.arange(0.5, 0.96, 0.05)
 

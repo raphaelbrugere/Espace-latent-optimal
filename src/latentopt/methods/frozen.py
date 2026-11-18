@@ -1,15 +1,15 @@
-"""Entraînement d'un neck et d'une tête sur un backbone gelé.
+"""Entrainement d'un neck et d'une tete sur un backbone gele.
 
-Le backbone reste en eval() et sans gradient pendant tout l'entraînement : Lightning
-appelle train() sur le module entier à chaque epoch, `train` est donc redéfini pour ne
-remettre que la tête en mode entraînement (sinon le drop-path du backbone se réactive).
-Avec `freeze_neck` (neck repris d'un entraînement précédent), le neck est traité comme le
+Le backbone reste en eval() et sans gradient pendant tout l'entrainement : Lightning
+appelle train() sur le module entier a chaque epoch, `train` est donc redefini pour ne
+remettre que la tete en mode entrainement (sinon le drop-path du backbone se reactive).
+Avec `freeze_neck` (neck repris d'un entrainement precedent), le neck est traite comme le
 backbone : eval(), sans gradient, hors de l'optimiseur.
 
-Optimisation de la baseline : AdamW, décroissance cosinus sans warmup, par pas.
+Optimisation de la baseline : AdamW, decroissance cosinus sans warmup, par pas.
 
-Les batches sont soit des images (le backbone est appliqué à la volée), soit des features
-déjà calculées (dict, voir evaluation/features.py) : même calcul pour la tête.
+Les batches sont soit des images (le backbone est applique a la volee), soit des features
+deja calculees (dict, voir evaluation/features.py) : meme calcul pour la tete.
 """
 
 import math
@@ -25,11 +25,11 @@ from latentopt.models.contract import freeze
 
 
 class FrozenBackboneModule(L.LightningModule):
-    """Entraîne neck + tête (`head`, un Downstream) sur un backbone gelé (sondage linéaire, FPN,
-    détection), ou la tête seule sur un neck gelé (`freeze_neck`).
+    """Entraine neck + tete (`head`, un Downstream) sur un backbone gele (sondage lineaire, FPN,
+    detection), ou la tete seule sur un neck gele (`freeze_neck`).
 
-    Le backbone reste en mode eval même sous `train()` ; seuls neck et tête reçoivent des
-    gradients, ou la tête seule."""
+    Le backbone reste en mode eval meme sous `train()` ; seuls neck et tete recoivent des
+    gradients, ou la tete seule."""
 
     def __init__(
         self,
@@ -58,7 +58,7 @@ class FrozenBackboneModule(L.LightningModule):
         return self
 
     def features(self, x: Tensor | dict[str, Tensor]) -> dict[str, Tensor]:
-        """Features du backbone gelé, sans gradient ; un dict (cache) est rendu tel quel."""
+        """Features du backbone gele, sans gradient ; un dict (cache) est rendu tel quel."""
         if isinstance(x, dict):  # cache de features
             return x
         with torch.no_grad():
@@ -84,7 +84,7 @@ class FrozenBackboneModule(L.LightningModule):
         self.log_dict({f"val/{k}": v for k, v in scores.items()})
 
     def configure_optimizers(self) -> dict[str, Any]:
-        params = [p for p in self.head.parameters() if p.requires_grad]  # sans le neck gelé
+        params = [p for p in self.head.parameters() if p.requires_grad]  # sans le neck gele
         opt = torch.optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay)
         total = self.trainer.estimated_stepping_batches
         sched = torch.optim.lr_scheduler.LambdaLR(

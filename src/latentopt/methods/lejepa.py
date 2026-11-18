@@ -1,16 +1,16 @@
-"""LeJEPA (Balestriero & LeCun, 2025) : pré-entraînement joint-embedding sans heuristique.
+"""LeJEPA (Balestriero & LeCun, 2025) : pre-entrainement joint-embedding sans heuristique.
 
-    L = λ · SIGReg(z) + (1 - λ) · E_v ||z_v - z̄||²
+    L = lambda * SIGReg(z) + (1 - lambda) * E_v ||z_v - z_bar||^2
 
-où z = g(f(x_v)) est la projection des V vues d'une image et z̄ leur centroïde. SIGReg
-remplace à lui seul les mécanismes anti-collapse habituels (EMA teacher, stop-gradient,
-centrage, négatifs) : la cible N(0, I) minimise le risque downstream dans le pire cas.
+ou z = g(f(x_v)) est la projection des V vues d'une image et z_bar leur centroide. SIGReg
+remplace a lui seul les mecanismes anti-collapse habituels (EMA teacher, stop-gradient,
+centrage, negatifs) : la cible N(0, I) minimise le risque downstream dans le pire cas.
 
 Les losses portent sur le projecteur g ; c'est `embed` = f(x) qui sert en aval. La sonde
-en ligne lit des embeddings détachés : elle suit l'entraînement sans fuite de labels
+en ligne lit des embeddings detaches : elle suit l'entrainement sans fuite de labels
 vers le backbone.
 
-Valeurs par défaut : celles de l'exemple minimal de LeJEPA, utilisées par la baseline
+Valeurs par defaut : celles de l'exemple minimal de LeJEPA, utilisees par la baseline
 (ViT-S/8 sur Imagenette, 128px).
 
 `LeJEPA` est un nn.Module pur (testable sans Lightning) ; `LeJEPAModule` l'enveloppe
@@ -38,7 +38,7 @@ from latentopt.models.necks import EmbedNorm
 class MultiViewTransform:
     """(image PIL, label) -> ((V, 3, size, size), label) : V vues i.i.d. sous les
     augmentations LeJEPA. Signature conjointe des transforms de `data/` : s'utilise avec
-    `data.datasets.base.Subset`. Le label ne sert qu'à la sonde en ligne."""
+    `data.datasets.base.Subset`. Le label ne sert qu'a la sonde en ligne."""
 
     def __init__(self, size: int = 128, num_views: int = 4) -> None:
         self.num_views = num_views
@@ -63,7 +63,7 @@ class MultiViewTransform:
 class LeJEPA(nn.Module):
     """Backbone + projecteur + SIGReg, et sonde en ligne optionnelle.
 
-    `backbone` respecte le contrat des têtes : `forward(x)["embed"]` de forme (B, D)
+    `backbone` respecte le contrat des tetes : `forward(x)["embed"]` de forme (B, D)
     et un attribut `embed_dim` = D.
     """
 
@@ -93,11 +93,11 @@ class LeJEPA(nn.Module):
     def forward(self, views: Tensor, labels: Tensor | None = None) -> dict[str, Tensor]:
         """views (N, V, 3, H, W), labels (N,) pour la sonde -> dict des losses.
 
-        `loss` est la quantité à rétropropager ; elle inclut la loss de la sonde, qui ne
-        reçoit que des embeddings détachés.
+        `loss` est la quantite a retropropager ; elle inclut la loss de la sonde, qui ne
+        recoit que des embeddings detaches.
         """
         N, V = views.shape[:2]
-        emb = self.backbone(views.flatten(0, 1))["embed"]  # (N·V, D)
+        emb = self.backbone(views.flatten(0, 1))["embed"]  # (N*V, D)
         z = self.projector(emb).reshape(N, V, -1).transpose(0, 1)  # (V, N, d)
 
         inv_loss = (z.mean(0) - z).square().mean()
@@ -114,7 +114,7 @@ class LeJEPA(nn.Module):
         return out
 
     def ssl_parameters(self) -> list[nn.Parameter]:
-        """Paramètres optimisés par les losses SSL (hors sonde)."""
+        """Parametres optimises par les losses SSL (hors sonde)."""
         return [*self.backbone.parameters(), *self.projector.parameters()]
 
 
@@ -128,9 +128,9 @@ def build_optimizer(
     probe_lr: float = 1e-3,
     probe_weight_decay: float = 1e-7,
 ) -> tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LRScheduler]:
-    """AdamW, warmup linéaire depuis 1 % du lr puis décroissance cosinus, par step.
+    """AdamW, warmup lineaire depuis 1 % du lr puis decroissance cosinus, par step.
 
-    `eta_min` est un lr absolu, commun à tous les groupes (sémantique de
+    `eta_min` est un lr absolu, commun a tous les groupes (semantique de
     CosineAnnealingLR), pas une fraction de `lr`.
     """
     groups = [{"params": model.ssl_parameters(), "lr": lr, "weight_decay": weight_decay}]
@@ -155,13 +155,13 @@ def build_optimizer(
 class LeJEPAModule(L.LightningModule):
     """Enveloppe Lightning de `LeJEPA`.
 
-    Entraînement : batches (views (N, V, 3, H, W), labels (N,)) ; les labels ne servent
-    qu'à la sonde en ligne. Validation : batches (x (B, 3, H, W), y (B,)) ; précision de
-    la sonde, pondérée par la taille des batches (= correct / total sur l'epoch).
+    Entrainement : batches (views (N, V, 3, H, W), labels (N,)) ; les labels ne servent
+    qu'a la sonde en ligne. Validation : batches (x (B, 3, H, W), y (B,)) ; precision de
+    la sonde, ponderee par la taille des batches (= correct / total sur l'epoch).
 
-    Le scheduler avance à chaque pas d'optimisation (interval="step"), warmup et cosinus
-    étant définis en pas : le défaut de Lightning (une fois par epoch) étirerait le
-    warmup d'un facteur égal au nombre de pas par epoch.
+    Le scheduler avance a chaque pas d'optimisation (interval="step"), warmup et cosinus
+    etant definis en pas : le defaut de Lightning (une fois par epoch) etirerait le
+    warmup d'un facteur egal au nombre de pas par epoch.
     """
 
     def __init__(self, model: LeJEPA, make_optimizer: Callable, warmup_epochs: int = 1) -> None:

@@ -1,4 +1,4 @@
-"""`download(force=True)` supprime l'ancien téléchargement avant de recommencer."""
+"""`download(force=True)` supprime l'ancien telechargement avant de recommencer."""
 
 import pytest
 
@@ -50,7 +50,7 @@ def test_force_download_removes_the_old_folder_first(tmp_path, fake, module, att
     folder = make_download(tmp_path, module.FOLDER)
     cls = fake(module, attr, folder)
     module.download(tmp_path, force=True)
-    assert cls.calls and not any(cls.calls)  # le dossier n'existait plus à l'appel
+    assert cls.calls and not any(cls.calls)  # le dossier n'existait plus a l'appel
 
 
 def test_imagenette_force_download_removes_the_archive_too(tmp_path, fake):
@@ -70,7 +70,7 @@ def test_download_without_force_keeps_existing_files(tmp_path, fake):
 
 
 def toy_module(splits_module=None, present=False):
-    """Faux dataset : note les appels de `download` et, si demandé, fige un split `toy`."""
+    """Faux dataset : note les appels de `download` et, si demande, fige un split `toy`."""
     calls = {"download": [], "splits": []}
 
     class Module:
@@ -118,29 +118,29 @@ def test_prepare_passes_the_force_flags(prepared):
 def test_prepare_says_when_the_dataset_is_already_there(prepared, capsys):
     calls = prepared(present=True)
     out = capsys.readouterr().out
-    assert calls["download"] == [] and "[toy] déjà présent dans" in out and "tel quel" in out
+    assert calls["download"] == [] and "[toy] deja present dans" in out and "tel quel" in out
 
 
 def test_force_download_downloads_even_if_present(prepared, capsys):
     calls = prepared("--force-download", present=True)
     assert calls["download"] == [True]
-    assert "déjà présent" not in capsys.readouterr().out
+    assert "deja present" not in capsys.readouterr().out
 
 
 def test_prepare_says_what_happens_to_the_splits(prepared, capsys):
     prepared()
-    assert "splits toy : créés (train 9, val 1)" in capsys.readouterr().out
+    assert "splits toy : crees (train 9, val 1)" in capsys.readouterr().out
     prepared()
-    assert "splits toy : déjà figés, conservés" in capsys.readouterr().out
+    assert "splits toy : deja figes, conserves" in capsys.readouterr().out
     prepared("--force-splits")
-    assert "splits toy : réécrits" in capsys.readouterr().out
+    assert "splits toy : reecrits" in capsys.readouterr().out
 
 
 def test_download_time_is_only_shown_with_verbose(prepared, capsys):
     prepared()
-    assert "téléchargé en" not in capsys.readouterr().out
+    assert "telecharge en" not in capsys.readouterr().out
     prepared("--verbose")
-    assert "[toy] téléchargé en" in capsys.readouterr().out
+    assert "[toy] telecharge en" in capsys.readouterr().out
 
 
 def test_progress_bars_are_hidden_unless_verbose_then_restored():
@@ -148,9 +148,9 @@ def test_progress_bars_are_hidden_unless_verbose_then_restored():
 
     original = utils.tqdm
     with prepare.progress_bars(False):
-        with utils.tqdm(total=1) as bar:  # même appel que `_urlretrieve`
+        with utils.tqdm(total=1) as bar:  # meme appel que `_urlretrieve`
             assert bar.disable
     assert utils.tqdm is original
 
     with prepare.progress_bars(True):
-        assert utils.tqdm is original  # --verbose : rien n'est masqué
+        assert utils.tqdm is original  # --verbose : rien n'est masque

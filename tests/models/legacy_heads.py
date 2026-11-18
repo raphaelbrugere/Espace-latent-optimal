@@ -1,8 +1,8 @@
-"""Têtes monolithiques d'avant la coupe neck / tête : référence des tests d'équivalence.
+"""Tetes monolithiques d'avant la coupe neck / tete : reference des tests d'equivalence.
 
-Copie fidèle des anciennes `LinearProbe`, `FPNHead` et `SoftArgmaxHead`. Ne pas les modifier :
-elles servent à vérifier que les têtes recomposées (neck + tête) font exactement le même calcul,
-avec les mêmes poids initiaux pour une même graine.
+Copie fidele des anciennes `LinearProbe`, `FPNHead` et `SoftArgmaxHead`. Ne pas les modifier :
+elles servent a verifier que les tetes recomposees (neck + tete) font exactement le meme calcul,
+avec les memes poids initiaux pour une meme graine.
 """
 
 import torch
@@ -14,15 +14,15 @@ from torch import Tensor
 class LinearProbe(nn.Module):
     """LayerNorm puis projection affine : `embed` (B, D) -> logits (B, K).
 
-    La LayerNorm absorbe l'échelle propre à chaque backbone gelé, ce qui rend les
-    hyperparamètres d'optimisation de la sonde transférables d'un backbone à l'autre.
-    Sa partie affine se replie dans `fc` : la frontière de décision reste linéaire
-    à une normalisation près. `norm=False` donne la sonde linéaire stricte.
+    La LayerNorm absorbe l'echelle propre a chaque backbone gele, ce qui rend les
+    hyperparametres d'optimisation de la sonde transferables d'un backbone a l'autre.
+    Sa partie affine se replie dans `fc` : la frontiere de decision reste lineaire
+    a une normalisation pres. `norm=False` donne la sonde lineaire stricte.
     """
 
     def __init__(self, embed_dim: int, num_classes: int, norm: bool = True) -> None:
         super().__init__()
-        self.in_keys = ["embed"]  # entrées lues dans le dict du backbone
+        self.in_keys = ["embed"]  # entrees lues dans le dict du backbone
         self.norm = nn.LayerNorm(embed_dim) if norm else nn.Identity()
         self.fc = nn.Linear(embed_dim, num_classes)
 
@@ -42,7 +42,7 @@ class FPNHead(nn.Module):
         levels: list[str] | None = None,
         upsample: str = "nearest",
     ) -> None:
-        """`levels` : noms des cartes à fusionner, dans l'ordre de `feature_info` (défaut :
+        """`levels` : noms des cartes a fusionner, dans l'ordre de `feature_info` (defaut :
         toutes). `upsample` : mode de F.interpolate du chemin top-down."""
         super().__init__()
         if levels is not None:
@@ -51,7 +51,7 @@ class FPNHead(nn.Module):
                 raise ValueError(f"niveaux inconnus du backbone : {sorted(unknown)}")
             feature_info = [level for level in feature_info if level["name"] in levels]
         self.names = [level["name"] for level in feature_info]
-        self.in_keys = self.names  # entrées lues dans le dict du backbone
+        self.in_keys = self.names  # entrees lues dans le dict du backbone
         self.upsample = upsample
         self.lateral = nn.ModuleList(
             [nn.Conv2d(level["channels"], channels, kernel_size=1) for level in feature_info]
@@ -73,7 +73,7 @@ class FPNHead(nn.Module):
 
 
 class SoftArgmaxHead(nn.Module):
-    """(B, C, H, W) -> {"box": (B, 4) xyxy normalisé dans [0, 1], "logits": (B, K)}."""
+    """(B, C, H, W) -> {"box": (B, 4) xyxy normalise dans [0, 1], "logits": (B, K)}."""
 
     def __init__(
         self,
@@ -83,10 +83,10 @@ class SoftArgmaxHead(nn.Module):
         target_stride: int = 8,
     ) -> None:
         super().__init__()
-        # stride le plus proche de target_stride ; à égalité (ViT simple), le plus profond
+        # stride le plus proche de target_stride ; a egalite (ViT simple), le plus profond
         level = min(reversed(feature_info), key=lambda f: abs(f["stride"] - target_stride))
         self.name = level["name"]
-        self.in_keys = [self.name]  # entrées lues dans le dict du backbone
+        self.in_keys = [self.name]  # entrees lues dans le dict du backbone
 
         self.conv1 = nn.Conv2d(level["channels"], channels, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(channels)
@@ -110,7 +110,7 @@ class SoftArgmaxHead(nn.Module):
         center_x = (cols.flatten() + dx) / W
         center_y = (rows.flatten() + dy) / H
 
-        # espérance sous l'attention
+        # esperance sous l'attention
         cx, cy, w, h = ((v * weights).sum(dim=1) for v in (center_x, center_y, width, height))
         box = torch.stack([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], dim=1).clamp(0, 1)
 

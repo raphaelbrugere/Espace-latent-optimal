@@ -1,10 +1,10 @@
-"""Registre des tâches downstream : dataset, transforms, loss, métrique.
+"""Registre des taches downstream : dataset, transforms, loss, metrique.
 
-Cinq tâches de protocole (entrée 128px, splits figés, transforms et métriques fixes, voir
-docs/DATASETS.md), plus trois tâches synthétiques pour le smoke run (64px).
+Cinq taches de protocole (entree 128px, splits figes, transforms et metriques fixes, voir
+docs/DATASETS.md), plus trois taches synthetiques pour le smoke run (64px).
 
 `default_neck`, `default_head` et `epochs` forment la recette de la baseline : choix par
-défaut, remplaçables (`neck=...`, `head=...`, `epochs=...`), contrairement au protocole.
+defaut, remplacables (`neck=...`, `head=...`, `epochs=...`), contrairement au protocole.
 """
 
 from collections.abc import Callable
@@ -25,9 +25,9 @@ SIZE, SMOKE_SIZE = 128, 64
 
 @dataclass(frozen=True)
 class Task:
-    """Protocole d'une tâche aval : données, transforms, perte et métrique.
+    """Protocole d'une tache aval : donnees, transforms, perte et metrique.
 
-    Les tâches sont enregistrées dans `TASKS` ; `get_task(nom)` les retrouve."""
+    Les taches sont enregistrees dans `TASKS` ; `get_task(nom)` les retrouve."""
 
     name: str
     num_classes: int
@@ -36,11 +36,11 @@ class Task:
     eval_transform: Callable
     train_transform: Callable  # augmentation minimale de la baseline
     loss: Callable
-    metric: Callable  # () -> métrique vierge
+    metric: Callable  # () -> metrique vierge
     default_neck: str  # neck de la baseline : configs/neck/<nom>.yaml
-    default_head: str  # tête de la baseline : configs/head/<nom>.yaml
+    default_head: str  # tete de la baseline : configs/head/<nom>.yaml
     epochs: int  # epochs de la baseline
-    collate_fn: Callable | None = None  # split d'éval seulement
+    collate_fn: Callable | None = None  # split d'eval seulement
 
     def dataset(self, split: str, train: bool = False) -> Any:
         return self.build(split, self.train_transform if train else self.eval_transform)
@@ -54,7 +54,7 @@ def classification(
     epochs: int,
     metric: str | None = None,
 ) -> Task:
-    """Pas d'augmentation à l'entraînement (baseline) : train = éval."""
+    """Pas d'augmentation a l'entrainement (baseline) : train = eval."""
     balanced = metric == "balanced_acc"
     return Task(
         name=name,
@@ -123,12 +123,12 @@ TASKS = {
 
 def get_task(name: str) -> Task:
     if name not in TASKS:
-        raise KeyError(f"tâche inconnue '{name}', disponibles : {sorted(TASKS)}")
+        raise KeyError(f"tache inconnue '{name}', disponibles : {sorted(TASKS)}")
     return TASKS[name]
 
 
 def to_device(y: Any, device: torch.device) -> Any:
-    """Déplace des cibles sur `device`, quelle que soit leur structure (tenseur, liste, dict)."""
+    """Deplace des cibles sur `device`, quelle que soit leur structure (tenseur, liste, dict)."""
     if torch.is_tensor(y):
         return y.to(device, non_blocking=True)
     if isinstance(y, dict):
@@ -139,7 +139,7 @@ def to_device(y: Any, device: torch.device) -> Any:
 
 
 def to_float(out: Any) -> Any:
-    """Sorties de tête en fp32 (après autocast), quelle que soit leur structure."""
+    """Sorties de tete en fp32 (apres autocast), quelle que soit leur structure."""
     if torch.is_tensor(out):
         return out.float()
     if isinstance(out, dict):

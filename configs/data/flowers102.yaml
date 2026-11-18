@@ -1,7 +1,7 @@
-# Pool de pré-entraînement : train officiel de Flowers-102 (1 020 images), labels pour la
+# Pool de pre-entrainement : train officiel de Flowers-102 (1 020 images), labels pour la
 # sonde en ligne seulement. Hors protocole (pool du protocole : imagenette) : scores non
-# comparables à ceux de la baseline. Le test n'y entre jamais.
-# Prérequis : lo data prepare flowers102
+# comparables a ceux de la baseline. Le test n'y entre jamais.
+# Prerequis : lo data prepare flowers102
 source:
   _target_: latentopt.data.datasets.flowers102.pretraining_images
 img_size: 128

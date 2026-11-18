@@ -1,4 +1,4 @@
-"""Splits figés : partitions exactes, déterministes, stockées par identifiant."""
+"""Splits figes : partitions exactes, deterministes, stockees par identifiant."""
 
 import json
 from collections import Counter
@@ -73,10 +73,10 @@ def test_save_load_indices_roundtrip(splits_dir):
 
     payload = splits.load("toy")
     assert payload["dataset"] == "toy" and payload["seed"] == 0 and payload["frac"] == 0.25
-    # stocké par identifiant, trié
+    # stocke par identifiant, trie
     assert payload["splits"]["val"] == sorted(ids[i] for i in s["val"])
 
-    # robuste à un changement d'ordre de listage de la source
+    # robuste a un changement d'ordre de listage de la source
     shuffled = list(reversed(ids))
     for split in ("train", "val"):
         got = [shuffled[i] for i in splits.indices("toy", split, shuffled)]
@@ -103,10 +103,10 @@ def test_freeze_keeps_an_existing_file_unless_forced(splits_dir):
 
     path = splits.freeze("toy", compute(0))
     first = path.read_text(encoding="utf-8")
-    # existant : rien n'est recalculé ni réécrit, même si le calcul donnerait autre chose
+    # existant : rien n'est recalcule ni reecrit, meme si le calcul donnerait autre chose
     assert splits.freeze("toy", compute(1)) == path
     assert path.read_text(encoding="utf-8") == first and calls == [0]
-    # force : réécrit
+    # force : reecrit
     splits.freeze("toy", compute(1), force=True)
     assert path.read_text(encoding="utf-8") != first and calls == [0, 1]
 
@@ -116,7 +116,7 @@ def test_load_missing_split_file_explains_command(splits_dir):
         splits.load("absent")
 
 
-# Splits commités : un changement involontaire casse la comparabilité avec les scores existants.
+# Splits commites : un changement involontaire casse la comparabilite avec les scores existants.
 
 
 def committed():
@@ -130,7 +130,7 @@ def test_committed_splits_are_disjoint_sorted_and_unique(path):
     parts = payload["splits"]
     seen = set()
     for name, ids in parts.items():
-        assert ids == sorted(ids), f"{name} non trié"
+        assert ids == sorted(ids), f"{name} non trie"
         assert len(ids) == len(set(ids)), f"{name} contient des doublons"
         assert not seen & set(ids), f"{name} recouvre un autre split"
         seen |= set(ids)

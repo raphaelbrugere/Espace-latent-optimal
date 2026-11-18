@@ -1,7 +1,7 @@
 """Brique commune des datasets : `Subset` (source + indices + transform) et `require`.
 
 Une source est tout objet indexable renvoyant (image PIL, cible brute) ; le transform
-reçoit les deux ensemble pour garder image et cible alignées (flip, crop).
+recoit les deux ensemble pour garder image et cible alignees (flip, crop).
 """
 
 import importlib
@@ -28,13 +28,13 @@ class Subset(Dataset):
 
 
 def raw(img: Any, target: Any) -> tuple[Any, Any]:
-    """Transform identité de `Subset` : (image, cible) inchangées. Fonction de module, donc
-    picklable par les workers d'un DataLoader, contrairement à une lambda."""
+    """Transform identite de `Subset` : (image, cible) inchangees. Fonction de module, donc
+    picklable par les workers d'un DataLoader, contrairement a une lambda."""
     return img, target
 
 
 def reset(*paths: Path) -> None:
-    """Supprime des téléchargements existants (dossier ou fichier) : `download(force=True)`."""
+    """Supprime des telechargements existants (dossier ou fichier) : `download(force=True)`."""
     for path in paths:
         if path.is_dir():
             shutil.rmtree(path)
@@ -43,7 +43,7 @@ def reset(*paths: Path) -> None:
 
 
 def abbrev(target: str) -> str:
-    """Nom court (`ABBREV`) du module d'un dataset, d'après une fonction de ce module, ex.
+    """Nom court (`ABBREV`) du module d'un dataset, d'apres une fonction de ce module, ex.
     `latentopt.data.datasets.imagenette.pretraining_images` -> `imnt160`. Le nom court vit
     dans le code du dataset, jamais dans les configs."""
     module = importlib.import_module(target.rpartition(".")[0])
@@ -53,6 +53,6 @@ def abbrev(target: str) -> str:
 
 
 def require(path: Path, name: str) -> None:
-    """Échoue tout de suite, avec la commande à lancer, si les données manquent."""
+    """Echoue tout de suite, avec la commande a lancer, si les donnees manquent."""
     if not path.exists():
         raise FileNotFoundError(f"{name} absent de {path} : lance `uv run lo data prepare {name}`")

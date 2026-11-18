@@ -26,7 +26,7 @@ def test_help_lists_every_command_by_family(capsys):
     assert cli.main(["--help"]) == 0
     out = capsys.readouterr().out
     assert all(f"lo {' '.join(w)}" in out for w in cli.COMMANDS)
-    assert out.index("Lancer des runs") < out.index("lo pretrain") < out.index("Traçabilité")
+    assert out.index("Lancer des runs") < out.index("lo pretrain") < out.index("Tracabilite")
 
 
 def test_unknown_command_suggests_the_group(capsys):

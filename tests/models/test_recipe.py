@@ -1,4 +1,4 @@
-"""Configs nommées (configs/neck/, configs/head/) : chargées et construites sur un backbone."""
+"""Configs nommees (configs/neck/, configs/head/) : chargees et construites sur un backbone."""
 
 import pytest
 import torch
@@ -43,12 +43,12 @@ def test_unknown_config_lists_the_available_ones():
 
 
 def test_incompatible_neck_and_head_fail_early(pyramid):
-    """Un neck qui sort une carte et une tête qui attend un vecteur : refusé à la construction."""
+    """Un neck qui sort une carte et une tete qui attend un vecteur : refuse a la construction."""
     with pytest.raises(ValueError, match="attend un 'vector'"):
         recipe.build(recipe.load("neck", "fpn"), recipe.load("head", "linear"), pyramid, 3)
 
 
 def test_command_line_override_reaches_the_neck(pyramid):
-    """`neck.channels=8` : même neck, plus étroit."""
+    """`neck.channels=8` : meme neck, plus etroit."""
     cfg = OmegaConf.merge(recipe.load("neck", "fpn"), {"channels": 8})
     assert recipe.build_neck(cfg, pyramid).out_dim == 8

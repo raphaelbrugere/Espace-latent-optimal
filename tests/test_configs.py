@@ -1,5 +1,5 @@
-"""Configs Hydra : chaque point d'entrée et chaque expérience se compose et se résout ;
-la séparation « cluster = environnement, méthode = résultat » est respectée."""
+"""Configs Hydra : chaque point d'entree et chaque experience se compose et se resout ;
+la separation " cluster = environnement, methode = resultat " est respectee."""
 
 from pathlib import Path
 
@@ -15,7 +15,7 @@ register_resolvers()
 
 
 def load(name: str, overrides: list[str]):
-    """Config composée et entièrement résolue (hors nœud `hydra`, défini à l'exécution)."""
+    """Config composee et entierement resolue (hors noeud `hydra`, defini a l'execution)."""
     with initialize_config_dir(config_dir=str(CONFIGS), version_base="1.3"):
         cfg = compose(config_name=name, overrides=overrides)
     return OmegaConf.create(OmegaConf.to_container(cfg, resolve=True))
@@ -34,7 +34,7 @@ def test_pretrain_composes_on_every_cluster(cluster):
 @pytest.mark.parametrize("exp", [e for e in experiments() if e != "smoke_train"])
 def test_pretrain_experiments_compose(exp):
     cfg = load("pretrain", [f"experiment={exp}"])
-    assert cfg.experiment_name == exp  # nom du dossier de résultats
+    assert cfg.experiment_name == exp  # nom du dossier de resultats
 
 
 def test_smoke_pretrain_is_tiny_and_synthetic():
@@ -67,7 +67,7 @@ ENV_KEYS = {
 
 @pytest.mark.parametrize("path", sorted((CONFIGS / "cluster").glob("*.yaml")), ids=lambda p: p.stem)
 def test_cluster_configs_only_hold_environment(path: Path):
-    """Rien dans cluster/ ne doit changer le résultat d'un run (hors réglages Slurm)."""
+    """Rien dans cluster/ ne doit changer le resultat d'un run (hors reglages Slurm)."""
     cfg = OmegaConf.load(path)
     assert set(cfg.cluster) <= ENV_KEYS
     assert set(cfg) <= {"cluster", "defaults", "hydra"}

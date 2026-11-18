@@ -1,14 +1,14 @@
-"""Évaluation des necks et des têtes entraînés par `lo train`.
+"""Evaluation des necks et des tetes entraines par `lo train`.
 
-Entrée : des dossiers d'entraînement (results/<run>/downstream/<tâche>-<neck>-<tête>-<date>),
-sur un ou plusieurs backbones. Chaque tête est reconstruite avec son neck (le neck.pt qu'elle
-désigne, appris avec elle ou repris gelé) et son backbone, puis évaluée sur le split demandé.
-Sortie : une entrée par entraînement, écrite par `write` dans le results.json d'un nouveau
-dossier <entraînement>/eval/<split>-<date>/ (voir cli/run/eval.py).
+Entree : des dossiers d'entrainement (results/<run>/downstream/<tache>-<neck>-<tete>-<date>),
+sur un ou plusieurs backbones. Chaque tete est reconstruite avec son neck (le neck.pt qu'elle
+designe, appris avec elle ou repris gele) et son backbone, puis evaluee sur le split demande.
+Sortie : une entree par entrainement, ecrite par `write` dans le results.json d'un nouveau
+dossier <entrainement>/eval/<split>-<date>/ (voir cli/run/eval.py).
 
-Violations (signalées, pas bloquantes) : backbone > 30M paramètres, neck ou tête appris sur
-d'autres poids que ceux chargés (empreintes). Les paramètres du backbone, du neck et de la
-tête sont rapportés séparément, sans limite pour le neck et la tête.
+Violations (signalees, pas bloquantes) : backbone > 30M parametres, neck ou tete appris sur
+d'autres poids que ceux charges (empreintes). Les parametres du backbone, du neck et de la
+tete sont rapportes separement, sans limite pour le neck et la tete.
 """
 
 import json
@@ -49,7 +49,7 @@ def score(
     device: torch.device,
     precision: str = "fp32",
 ) -> dict[str, float]:
-    """Métriques de la tâche sur `loader` (images, ou features en cache)."""
+    """Metriques de la tache sur `loader` (images, ou features en cache)."""
     dtype = AUTOCAST[precision]
     backbone, head = backbone.to(device).eval(), head.to(device).eval()
     metric = task.metric()
@@ -62,8 +62,8 @@ def score(
 
 
 def backbone_info(run_cfg: Any) -> dict[str, Any]:
-    """Origine du backbone : nos runs (temps GPU, données), poids externes (référence)
-    ou poids aléatoires."""
+    """Origine du backbone : nos runs (temps GPU, donnees), poids externes (reference)
+    ou poids aleatoires."""
     target = run_cfg.backbone._target_
     if target.endswith("checkpoint.from_run"):
         pre_dir = resolve_run(run_cfg.backbone.run)
@@ -73,12 +73,12 @@ def backbone_info(run_cfg: Any) -> dict[str, Any]:
         return {"reference": False, "gpu_hours": pre.get("gpu_hours"), "pretraining_data": data}
     if ".external." in target:
         return {"reference": True, "gpu_hours": None, "pretraining_data": target.split(".")[-1]}
-    return {"reference": False, "gpu_hours": None, "pretraining_data": "aucun (poids aléatoires)"}
+    return {"reference": False, "gpu_hours": None, "pretraining_data": "aucun (poids aleatoires)"}
 
 
 def neck_folder(head_dir: Path, ref: str) -> Path:
-    """Dossier du neck d'une tête : `ref` (neck_dir de head.pt), relatif au dossier du backbone
-    (downstream/<…> : le sien, ou celui du neck repris)."""
+    """Dossier du neck d'une tete : `ref` (neck_dir de head.pt), relatif au dossier du backbone
+    (downstream/<...> : le sien, ou celui du neck repris)."""
     path = Path(ref)
     return path if path.is_absolute() else hub.run_root(head_dir) / path
 
@@ -86,8 +86,8 @@ def neck_folder(head_dir: Path, ref: str) -> Path:
 def load_trained(
     head_dir: Path, cfg: DictConfig, backbone: nn.Module
 ) -> tuple[Downstream, dict[str, Any], list[str]]:
-    """Neck + tête d'un dossier d'entraînement, poids chargés ; renvoie aussi le checkpoint de la
-    tête et les violations de provenance (empreintes du backbone et du neck)."""
+    """Neck + tete d'un dossier d'entrainement, poids charges ; renvoie aussi le checkpoint de la
+    tete et les violations de provenance (empreintes du backbone et du neck)."""
     task = get_task(cfg.task)
     ckpt = torch.load(head_dir / "head.pt", map_location="cpu", weights_only=False)
     neck_pt = neck_folder(head_dir, ckpt["neck_dir"]) / "neck.pt"
@@ -115,9 +115,9 @@ def evaluate_downstream(
     num_workers: int = 0,
     batch_size: int = 64,
 ) -> dict[Path, dict[str, Any]]:
-    """Évalue chaque entraînement sur `split` ; renvoie, par dossier, son entrée d'évaluation.
+    """Evalue chaque entrainement sur `split` ; renvoie, par dossier, son entree d'evaluation.
 
-    Un backbone partagé par plusieurs têtes n'est construit qu'une fois. Avec
+    Un backbone partage par plusieurs tetes n'est construit qu'une fois. Avec
     `cache_features`, les features sont extraites une fois (cache de features.py, batch 256).
     """
     backbones: dict[str, tuple[nn.Module, str, int, dict]] = {}
@@ -126,7 +126,7 @@ def evaluate_downstream(
         cfg = OmegaConf.load(head_dir / "config.yaml")
         key = json.dumps([OmegaConf.to_container(cfg.backbone, resolve=True), cfg.seed])
         if key not in backbones:
-            torch.manual_seed(cfg.seed)  # comme `lo train` : backbone à poids aléatoires
+            torch.manual_seed(cfg.seed)  # comme `lo train` : backbone a poids aleatoires
             backbone = instantiate(cfg.backbone).eval()
             backbones[key] = (backbone, weights_hash(backbone), count_params(backbone),
                               backbone_info(cfg))  # fmt: skip
@@ -134,7 +134,7 @@ def evaluate_downstream(
         task = get_task(cfg.task)
         model, ckpt, issues = load_trained(head_dir, cfg, backbone)
         if n_params > BACKBONE_MAX_PARAMS:
-            issues.append(f"backbone : {n_params:,} paramètres > {BACKBONE_MAX_PARAMS:,}")
+            issues.append(f"backbone : {n_params:,} parametres > {BACKBONE_MAX_PARAMS:,}")
 
         if cache_features:
             feats_info = {"backbone": OmegaConf.to_container(cfg.backbone, resolve=True)}
@@ -170,7 +170,7 @@ def evaluate_downstream(
 
 
 def write(eval_dir: Path, entry: dict[str, Any]) -> None:
-    """results.json d'une évaluation, dans son propre dossier eval/<split>-<date>/ : le
-    dossier d'entraînement n'est jamais modifié."""
+    """results.json d'une evaluation, dans son propre dossier eval/<split>-<date>/ : le
+    dossier d'entrainement n'est jamais modifie."""
     eval_dir.mkdir(parents=True, exist_ok=True)
     (eval_dir / "results.json").write_text(json.dumps(entry, indent=2) + "\n", encoding="utf-8")

@@ -57,7 +57,7 @@ class Stdin:
 
 def test_pushed_commit_runs_without_question(monkeypatch):
     monkeypatch.setattr(run, "unpushed_commit", lambda: None)
-    assert run.confirm_pushed(ask=lambda _: pytest.fail("question posée"))
+    assert run.confirm_pushed(ask=lambda _: pytest.fail("question posee"))
 
 
 @pytest.mark.parametrize("answer,ok", [("y", True), ("Y", True), ("n", False), ("", False)])
@@ -66,14 +66,14 @@ def test_unpushed_commit_asks_in_a_terminal(monkeypatch, answer, ok):
     monkeypatch.setattr(run.sys, "stdin", Stdin(tty=True))
     asked = []
     assert run.confirm_pushed(ask=lambda q: asked.append(q) or answer) is ok
-    assert "abc1234" in asked[0] and "traçabilité" in asked[0]
+    assert "abc1234" in asked[0] and "tracabilite" in asked[0]
 
 
 def test_unpushed_commit_only_warns_without_terminal(monkeypatch, capsys):
     monkeypatch.setattr(run, "unpushed_commit", lambda: "abc1234def")
     monkeypatch.setattr(run.sys, "stdin", Stdin(tty=False))
-    assert run.confirm_pushed(ask=lambda _: pytest.fail("question posée"))
-    assert "traçabilité" in capsys.readouterr().err
+    assert run.confirm_pushed(ask=lambda _: pytest.fail("question posee"))
+    assert "tracabilite" in capsys.readouterr().err
 
 
 # --- lightning_settings ------------------------------------------------------------------
@@ -113,7 +113,7 @@ def test_fp16_on_cpu_is_refused(gpu_broken):
 
 
 def test_cpu_never_touches_the_gpu(monkeypatch):
-    monkeypatch.setattr(run, "cuda_problem", lambda: pytest.fail("GPU interrogé"))
+    monkeypatch.setattr(run, "cuda_problem", lambda: pytest.fail("GPU interroge"))
     assert run.resolve_device("cpu") == "cpu"
 
 
@@ -154,7 +154,7 @@ def test_prepare_writes_resolved_config_and_git(tmp_path, monkeypatch):
     git = run.prepare(c, tmp_path / "r")
     assert git == {**DIRTY, "lineage": run.lineage()}
     saved = OmegaConf.load(tmp_path / "r" / "config.yaml")
-    assert saved.b == 2  # résolue : se suffit à elle-même
+    assert saved.b == 2  # resolue : se suffit a elle-meme
     text = (tmp_path / "r" / "git.txt").read_text(encoding="utf-8")
     assert "commit: abc" in text and "dirty: True" in text and "src/x.py" in text
     on_disk = json.loads((tmp_path / "r" / "lineage.json").read_text(encoding="utf-8"))
@@ -191,7 +191,7 @@ def test_save_backbone_records_hash_and_results(tmp_path, pyramid):
     assert on_disk["backbone_params"] == count_params(pyramid)
     assert on_disk["epochs"] == 3 and on_disk["final_metrics"] == {"x": 1.0}
     assert (tmp_path / "backbone.pt").exists()
-    assert not pyramid.training  # sauvegardé en eval, sur CPU
+    assert not pyramid.training  # sauvegarde en eval, sur CPU
 
 
 # --- MLflow ---------------------------------------------------------------------------------
@@ -276,7 +276,7 @@ def test_mlflow_records_config_git_and_results(tmp_path, monkeypatch):
     assert r.data.metrics["results/val/top1"] == 0.5
     assert r.data.metrics["results/head_params"] == 1000
     assert [m.value for m in client.get_metric_history(r.info.run_id, "train/loss")] == [1.0, 0.5]
-    assert not any("changed" in k for k in {**r.data.metrics, **tags})  # listes ignorées
+    assert not any("changed" in k for k in {**r.data.metrics, **tags})  # listes ignorees
     assert client.list_artifacts(r.info.run_id) == []  # les fichiers restent dans le dossier
 
 
@@ -289,13 +289,13 @@ def test_mlflow_run_name_falls_back_outside_results_root(tmp_path):
 def test_mlflow_marks_crashed_runs_as_failed(tmp_path):
     run_dir = run_dir_of(tmp_path, "pretrain", "exp", "d")
     logger = run.mlflow_logger(mlflow_cfg(tmp_path), "pretrain", run_dir, CLEAN)
-    logger.finalize("failed")  # ce que fait Lightning quand fit() lève une exception
+    logger.finalize("failed")  # ce que fait Lightning quand fit() leve une exception
     assert only_run(run_dir)[2].info.status == "FAILED"
 
 
 def test_successive_runs_in_one_process_keep_their_own_database(tmp_path):
-    """Balayage -m local : plusieurs runs dans le même processus. Lightning appelle
-    mlflow.set_tracking_uri, qui écrit MLFLOW_TRACKING_URI : il ne doit pas fuir."""
+    """Balayage -m local : plusieurs runs dans le meme processus. Lightning appelle
+    mlflow.set_tracking_uri, qui ecrit MLFLOW_TRACKING_URI : il ne doit pas fuir."""
     import os
 
     cfg = mlflow_cfg(tmp_path)
@@ -346,8 +346,8 @@ def test_mlflow_run_name_is_the_run_folder_and_name_parts_become_tags(tmp_path):
 
 
 def test_mlflow_eval_has_its_own_database_tagged_like_its_training(tmp_path):
-    """L'évaluation a sa base dans eval/<split>-<date>/ : celle de l'entraînement n'est pas
-    modifiée, et le tag `downstream` relie les deux."""
+    """L'evaluation a sa base dans eval/<split>-<date>/ : celle de l'entrainement n'est pas
+    modifiee, et le tag `downstream` relie les deux."""
     cfg = mlflow_cfg(tmp_path)
     trained = run_dir_of(tmp_path, BB, "downstream", DS)
     run.mlflow_logger(cfg, "train", trained, CLEAN).finalize("success")

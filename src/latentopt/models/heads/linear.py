@@ -1,8 +1,8 @@
-"""Tête linéaire : la sonde de classification, protocole d'évaluation standard en SSL.
+"""Tete lineaire : la sonde de classification, protocole d'evaluation standard en SSL.
 
 Recette `linear` (configs/head/linear.yaml) : neck `EmbedNorm` (LayerNorm sur `embed`) puis
-cette tête. La partie affine de la LayerNorm se replie dans la projection : la frontière de
-décision reste linéaire à une normalisation près.
+cette tete. La partie affine de la LayerNorm se replie dans la projection : la frontiere de
+decision reste lineaire a une normalisation pres.
 """
 
 import torch.nn as nn

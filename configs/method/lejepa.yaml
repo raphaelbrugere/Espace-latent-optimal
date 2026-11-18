@@ -1,27 +1,27 @@
-# LeJEPA : λ·SIGReg + (1-λ)·invariance sur les projections des V vues.
-# Valeurs de la baseline (exemple minimal LeJEPA), sauf la précision.
-# Tout ce qui change le résultat est ici, jamais dans cluster/.
+# LeJEPA : lambda*SIGReg + (1-lambda)*invariance sur les projections des V vues.
+# Valeurs de la baseline (exemple minimal LeJEPA), sauf la precision.
+# Tout ce qui change le resultat est ici, jamais dans cluster/.
 name: lejepa
 
-model: # latentopt.methods.LeJEPA ; backbone fourni à l'exécution
+model: # latentopt.methods.LeJEPA ; backbone fourni a l'execution
   _target_: latentopt.methods.LeJEPA
   _partial_: true
   proj_dim: 16 # dimension de sortie du projecteur (espace de SIGReg)
-  hidden_dim: 2048 # couches cachées du projecteur MLP
+  hidden_dim: 2048 # couches cachees du projecteur MLP
   lamb: 0.02 # poids de SIGReg ; 1 - lamb pour l'invariance
-  num_probe_classes: ${data.num_probe_classes} # sonde en ligne, sur embeddings détachés
+  num_probe_classes: ${data.num_probe_classes} # sonde en ligne, sur embeddings detaches
 
-num_views: 4 # vues augmentées par image
+num_views: 4 # vues augmentees par image
 epochs: 800
 batch_size: 128 # batch global, en images (x num_views passes dans le backbone)
 max_steps_per_epoch: null # entier pour raccourcir une epoch (smoke run)
 warmup_epochs: 1
 
-# fp16 par défaut : un job peut tomber sur une RTX 2080 Ti, sans bf16 matériel (docs/CLUSTER.md).
-# bf16 (celle de la baseline) seulement sur un nœud sh : gpu_prod_long ou -C sh. fp32 en CPU.
+# fp16 par defaut : un job peut tomber sur une RTX 2080 Ti, sans bf16 materiel (docs/CLUSTER.md).
+# bf16 (celle de la baseline) seulement sur un noeud sh : gpu_prod_long ou -C sh. fp32 en CPU.
 precision: fp16 # fp16 | bf16 | fp32
 
-optimizer: # latentopt.methods.build_optimizer ; modèle et nombre de steps fournis à l'exécution
+optimizer: # latentopt.methods.build_optimizer ; modele et nombre de steps fournis a l'execution
   _target_: latentopt.methods.build_optimizer
   _partial_: true
   lr: 2.0e-3

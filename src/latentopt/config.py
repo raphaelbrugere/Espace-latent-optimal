@@ -1,8 +1,8 @@
-"""Resolvers OmegaConf du projet, à enregistrer avant la composition Hydra.
+"""Resolvers OmegaConf du projet, a enregistrer avant la composition Hydra.
 
-${project_root:}                        racine du dépôt (absolue, séparateurs /)
-${run_name:<données>,<archi>,<méthode>[,<job>]}   nom d'un backbone (latentopt/hub.py)
-${train_dir:...}                                 dossier d'un run de `lo train` (<run>/downstream/…)
+${project_root:}                        racine du depot (absolue, separateurs /)
+${run_name:<donnees>,<archi>,<methode>[,<job>]}   nom d'un backbone (latentopt/hub.py)
+${train_dir:...}                                 dossier d'un run de `lo train` (<run>/downstream/)
 ${run_stamp:[<job>]}                             date du lancement, AAAAMMJJ_HHMMSS[_<job>]
 ${data_abbrev:<_target_ du pool>}                nom court du dataset (ABBREV de son module)
 """

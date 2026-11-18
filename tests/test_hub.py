@@ -1,5 +1,5 @@
-"""Noms, dossiers de backbone, publication sur le Hub et téléchargement (latentopt/hub.py),
-sans réseau."""
+"""Noms, dossiers de backbone, publication sur le Hub et telechargement (latentopt/hub.py),
+sans reseau."""
 
 import json
 
@@ -26,7 +26,7 @@ def test_normalize_turns_dashes_into_underscores():
     assert hub.normalize("pets_seg") == "pets_seg"
 
 
-@pytest.mark.parametrize("bad", ["", "vit/s8", "a..b", "été"])
+@pytest.mark.parametrize("bad", ["", "vit/s8", "a..b", "\u00e9t\u00e9"])
 def test_normalize_rejects_invalid_characters(bad):
     with pytest.raises(ValueError):
         hub.normalize(bad)
@@ -53,7 +53,7 @@ def test_parse_round_trips():
         "vit_s8-20261116_183012",
         "imnt160-vit_s8-lejepa",
         "imnt160-vit_s8-lejepa-2026_11_16",
-        f"{BB}-pets_seg-fpn",  # ancien nom de tête à 6 parties
+        f"{BB}-pets_seg-fpn",  # ancien nom de tete a 6 parties
     ],
 )
 def test_parse_rejects_malformed_names(bad):
@@ -70,7 +70,7 @@ def test_parse_downstream_and_eval_reject_malformed_names():
 
 def test_repo_id_checks_the_hub_length_limit():
     assert hub.repo_id(BB) == f"Espace-latent-optimal/{BB}"
-    with pytest.raises(ValueError, match="caractères"):
+    with pytest.raises(ValueError, match="caracteres"):
         hub.repo_id(f"{'d' * 80}-vit_s8-lejepa-20261116_183012")
 
 
@@ -87,7 +87,7 @@ def test_run_root_finds_the_backbone_folder(tmp_path):
 
 
 def test_a_downstream_folder_is_never_taken_for_a_backbone(tmp_path):
-    """<tâche>-<neck>-<tête>-<date> a 4 parties, comme un nom de backbone."""
+    """<tache>-<neck>-<tete>-<date> a 4 parties, comme un nom de backbone."""
     assert hub.parse_or_none(DS) is not None
     assert hub.run_root(tmp_path / BB / "downstream" / DS) == tmp_path / BB
     with pytest.raises(ValueError):
@@ -113,7 +113,7 @@ def test_train_dir_names_the_task_the_neck_and_the_head(tmp_path):
     assert hub.train_dir(*args, "pets_seg", "embed_norm", "linear") == (
         f"{BB}/downstream/pets_seg-embed_norm-linear-{date}"
     )
-    # neck et tête non choisis : ceux de la baseline de la tâche
+    # neck et tete non choisis : ceux de la baseline de la tache
     assert hub.train_dir(*args, "pets_seg", None, "null") == (
         f"{BB}/downstream/pets_seg-fpn-conv_seg-{date}"
     )
@@ -151,7 +151,7 @@ def test_each_trained_folder_gets_its_own_card(tmp_path):
     (root / "backbone").mkdir(parents=True)
     hub.write_card(root / "backbone", {"backbone_params": 21_000_000, "backbone_sha256": "abc"})
     card = (root / "backbone" / "README.md").read_text(encoding="utf-8")
-    assert f"# {BB} · backbone" in card and "21,000,000" in card
+    assert f"# {BB} - backbone" in card and "21,000,000" in card
 
     for name, res in ((DS, DS_RESULTS), (FROZEN, {**DS_RESULTS, "neck_frozen": True})):
         (root / "downstream" / name).mkdir(parents=True)
@@ -160,13 +160,13 @@ def test_each_trained_folder_gets_its_own_card(tmp_path):
     assert "| 0.5000 |" in card and "| 1,000 / 200 |" in card and "`01234567`" in card
     assert f"neck_from={DS}" in card and "repris" not in card
     frozen = (root / "downstream" / FROZEN / "README.md").read_text(encoding="utf-8")
-    assert f"repris gelé de `downstream/{DS}`" in frozen
+    assert f"repris gele de `downstream/{DS}`" in frozen
 
 
 def test_the_repo_card_does_not_list_the_runs():
     card = hub.repo_card(BB)
     assert card.startswith("---\nlibrary_name: pytorch") and "- lejepa" in card
-    assert DS not in card  # fixe : jamais réécrite quand d'autres ajoutent des runs
+    assert DS not in card  # fixe : jamais reecrite quand d'autres ajoutent des runs
 
 
 def test_no_card_outside_the_results_layout(tmp_path):
@@ -178,7 +178,7 @@ def test_no_card_outside_the_results_layout(tmp_path):
 
 
 def write(path, **content):
-    """write(dir, head_pt="w") écrit dir/head.pt (dernier « _ » = extension)."""
+    """write(dir, head_pt="w") ecrit dir/head.pt (dernier " _ " = extension)."""
     path.mkdir(parents=True, exist_ok=True)
     for name, value in content.items():
         name = ".".join(name.rsplit("_", 1))
@@ -188,8 +188,8 @@ def write(path, **content):
 
 @pytest.fixture
 def results(tmp_path, monkeypatch):
-    """Un backbone avec deux entraînements terminés (le second sur le neck du premier, gelé),
-    une évaluation terminée, une en cours et un entraînement en cours."""
+    """Un backbone avec deux entrainements termines (le second sur le neck du premier, gele),
+    une evaluation terminee, une en cours et un entrainement en cours."""
     monkeypatch.setenv("OUTPUT_ROOT", str(tmp_path / "results"))
     root = tmp_path / "results" / BB
     backbone = {"backbone_sha256": "abc", "backbone_params": 21_000_000, "epochs": 1}
@@ -200,7 +200,7 @@ def results(tmp_path, monkeypatch):
     write(ds, neck_pt="w", head_pt="w", config_yaml="a: 1", mlflow_db="x", README_md="d",
           results_json=DS_RESULTS)  # fmt: skip
     write(ds / "eval" / EVAL, config_yaml="a: 1", mlflow_db="x", results_json={"score": 0.4})
-    write(ds / "eval" / "val-20261119_110000", config_yaml="a: 1")  # éval en cours
+    write(ds / "eval" / "val-20261119_110000", config_yaml="a: 1")  # eval en cours
     write(root / "downstream" / FROZEN, head_pt="w", config_yaml="a: 1",
           results_json={**DS_RESULTS, "neck_frozen": True})  # fmt: skip
     write(root / "downstream" / "pets_seg-fpn-conv_seg-20261120_090000", config_yaml="a: 1")
@@ -243,13 +243,13 @@ def test_plan_publishes_the_finished_runs_of_the_folder(results):
 
 
 def test_plan_never_resends_what_is_already_published(results):
-    """Une copie locale d'un run déjà publié (téléchargée par `pull`) n'est jamais renvoyée :
-    un push ne peut pas écraser ce que d'autres ont publié."""
+    """Une copie locale d'un run deja publie (telechargee par `pull`) n'est jamais renvoyee :
+    un push ne peut pas ecraser ce que d'autres ont publie."""
     published = {f"downstream/{DS}/results.json", f"downstream/{DS}/mlflow.db", "README.md"}
     up = hub.plan(results, published)
     assert not published & set(up.files)
     assert sorted(up.present) == sorted(published)
-    assert f"downstream/{DS}/eval/{EVAL}/results.json" in up.files  # nouvelle éval : envoyée
+    assert f"downstream/{DS}/eval/{EVAL}/results.json" in up.files  # nouvelle eval : envoyee
 
 
 def test_plan_accepts_any_folder_inside_the_backbone(results):
@@ -285,12 +285,12 @@ def test_push_writes_the_repo_card_once_and_uploads_the_new_files(results):
     assert (results / "README.md").read_text(encoding="utf-8") == hub.repo_card(BB)
     assert "README.md" not in hub.files(results)  # republier ne la compte pas deux fois
 
-    (results / "README.md").write_text("modifiée", encoding="utf-8")
-    hub.push(hub.plan(results, {"README.md"}), api=FakeApi())  # déjà sur le Hub : pas réécrite
-    assert (results / "README.md").read_text(encoding="utf-8") == "modifiée"
+    (results / "README.md").write_text("modifiee", encoding="utf-8")
+    hub.push(hub.plan(results, {"README.md"}), api=FakeApi())  # deja sur le Hub : pas reecrite
+    assert (results / "README.md").read_text(encoding="utf-8") == "modifiee"
 
 
-# --- emplacement local et téléchargement ------------------------------------------------
+# --- emplacement local et telechargement ------------------------------------------------
 
 
 def test_locate_keeps_existing_paths(results):
@@ -316,7 +316,7 @@ def test_locate_downloads_a_missing_backbone_to_its_local_folder(results, monkey
     name = "imnt160-vit_s8-lejepa-20261120_000000"
     ds = hub.locate(f"{name}/downstream/{DS}")
     assert fetched == [name] and ds == results.parent / name / "downstream" / DS
-    assert hub.locate(f"{name}/downstream/{DS}") == ds and fetched == [name]  # déjà là
+    assert hub.locate(f"{name}/downstream/{DS}") == ds and fetched == [name]  # deja la
 
 
 def test_locate_reports_a_path_missing_from_the_repo(results, monkeypatch):

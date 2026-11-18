@@ -1,34 +1,34 @@
-# Config de premier niveau de `lo pretrain` : pré-entraînement d'un backbone.
+# Config de premier niveau de `lo pretrain` : pre-entrainement d'un backbone.
 #
 #   lo pretrain backbone=vit_s8                        # local
 #   lo pretrain experiment=smoke                       # smoke run
 #   lo pretrain experiment=<nom> cluster=dce -m        # job Slurm (-m obligatoire)
 #
-# Chaque run écrit dans results/<données>-<archi>-<méthode>-<AAAAMMJJ_HHMMSS>/backbone/ :
-# backbone.pt, README.md, config, run.log, métriques. <données> est le nom court (ABBREV) du
+# Chaque run ecrit dans results/<donnees>-<archi>-<methode>-<AAAAMMJJ_HHMMSS>/backbone/ :
+# backbone.pt, README.md, config, run.log, metriques. <donnees> est le nom court (ABBREV) du
 # module du dataset, ex. imnt160 : il est dans le code, pas dans les configs.
-# <données>-<archi>-<méthode>-<date> est le dossier du backbone, de ses entraînements
-# downstream et de leurs évaluations, et son dépôt Hugging Face (docs/HUB.md).
+# <donnees>-<archi>-<methode>-<date> est le dossier du backbone, de ses entrainements
+# downstream et de leurs evaluations, et son depot Hugging Face (docs/HUB.md).
 defaults:
   - common/hydra
-  - backbone: ??? # obligatoire : aucun backbone par défaut
+  - backbone: ??? # obligatoire : aucun backbone par defaut
   - method: lejepa
   - data: imagenette
   - cluster: local
   - _self_
   - optional experiment: null # experiment=<nom> : configs/experiment/<nom>.yaml
 
-experiment_name: default # chaque fichier de configs/experiment/ le redéfinit
+experiment_name: default # chaque fichier de configs/experiment/ le redefinit
 seed: 0
 resume: null # chemin d'un last.ckpt pour reprendre un run interrompu
-allow_dirty: false # true : autorise un job long sur le DCE avec un arbre git non commité
+allow_dirty: false # true : autorise un job long sur le DCE avec un arbre git non commite
 
-trainer: # réglages du Trainer sans effet sur le résultat de l'entraînement
-  limit_val_batches: null # entier : sonde évaluée sur une partie du val (smoke run)
+trainer: # reglages du Trainer sans effet sur le resultat de l'entrainement
+  limit_val_batches: null # entier : sonde evaluee sur une partie du val (smoke run)
   log_every_n_steps: 50
 
 hydra:
-  # Un seul nom, celui du sweep : date suffixée par _<n> pour le job n > 0 d'un -m. Sans -m,
+  # Un seul nom, celui du sweep : date suffixee par _<n> pour le job n > 0 d'un -m. Sans -m,
   # hydra.job.num vaut ??? : oc.select le remplace par "" (pas de suffixe).
   run:
     dir: ${hydra.sweep.dir}/${hydra.sweep.subdir}

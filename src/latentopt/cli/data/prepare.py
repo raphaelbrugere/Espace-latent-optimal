@@ -1,26 +1,26 @@
-"""Télécharge les datasets dans DATA_ROOT/datasets et les poids externes dans
-DATA_ROOT/models (défaut : <racine>/data/...).
-Seul point du code qui accède au réseau : datasets et backbones, eux, ne font que lire.
-Sur le DCE, à lancer depuis la passerelle, pour ne pas occuper un GPU pendant le téléchargement.
+"""Telecharge les datasets dans DATA_ROOT/datasets et les poids externes dans
+DATA_ROOT/models (defaut : <racine>/data/...).
+Seul point du code qui accede au reseau : datasets et backbones, eux, ne font que lire.
+Sur le DCE, a lancer depuis la passerelle, pour ne pas occuper un GPU pendant le telechargement.
 
     lo data prepare                          # tout
     lo data prepare imagenette oxford_pets   # une partie
     lo data prepare dino_vits8               # poids DINO du ViT-S/8
-    lo data prepare oxford_pets --force-download  # supprime et re-télécharge ce dataset
-    lo data prepare --force-splits           # réécrit aussi les splits figés qui existent
+    lo data prepare oxford_pets --force-download  # supprime et re-telecharge ce dataset
+    lo data prepare --force-splits           # reecrit aussi les splits figes qui existent
 
-Chaque dataset préparé crée ses splits figés manquants (src/latentopt/data/splits/*.json), sans
-toucher à ceux qui existent : ils sont ainsi écrits ici, une fois, et non par le premier job qui
-charge le dataset. Sur une installation à jour, le diff git doit rester vide.
-`--force-splits` les réécrit : à ne faire que pour changer volontairement les ensembles, les
+Chaque dataset prepare cree ses splits figes manquants (src/latentopt/data/splits/*.json), sans
+toucher a ceux qui existent : ils sont ainsi ecrits ici, une fois, et non par le premier job qui
+charge le dataset. Sur une installation a jour, le diff git doit rester vide.
+`--force-splits` les reecrit : a ne faire que pour changer volontairement les ensembles, les
 scores ne sont plus comparables aux anciens.
 `--force-download` supprime d'abord le dossier du dataset (et son archive) : sans lui, un
-téléchargement déjà présent n'est pas refait, même interrompu ou corrompu. Il ne concerne
+telechargement deja present n'est pas refait, meme interrompu ou corrompu. Il ne concerne
 que les datasets, pas les poids.
-Chaque dataset annonce s'il est déjà présent (utilisé tel quel) ou téléchargé, et ses splits
-s'ils sont créés, conservés ou réécrits.
-`--verbose` ajoute les barres de progression et la durée des téléchargements ; sans lui, les
-barres sont masquées (torchvision et Hugging Face les affichent sinon toujours, et remplissent
+Chaque dataset annonce s'il est deja present (utilise tel quel) ou telecharge, et ses splits
+s'ils sont crees, conserves ou reecrits.
+`--verbose` ajoute les barres de progression et la duree des telechargements ; sans lui, les
+barres sont masquees (torchvision et Hugging Face les affichent sinon toujours, et remplissent
 les logs Slurm).
 """
 
@@ -46,7 +46,7 @@ DATASETS = {
 
 @contextmanager
 def progress_bars(enabled: bool) -> Iterator[None]:
-    """Masque les barres de téléchargement hors `--verbose`, puis rétablit l'état d'origine."""
+    """Masque les barres de telechargement hors `--verbose`, puis retablit l'etat d'origine."""
     if enabled:
         yield
         return
@@ -56,7 +56,7 @@ def progress_bars(enabled: bool) -> Iterator[None]:
 
     tqdm, datasets_on = tv_utils.tqdm, datasets_logging.is_progress_bar_enabled()
     hub_off = hub_utils.are_progress_bars_disabled()
-    tv_utils.tqdm = partial(tqdm, disable=True)  # `_urlretrieve` lit ce nom à chaque appel
+    tv_utils.tqdm = partial(tqdm, disable=True)  # `_urlretrieve` lit ce nom a chaque appel
     datasets_logging.disable_progress_bar()
     hub_utils.disable_progress_bars()
     try:
@@ -71,7 +71,7 @@ def progress_bars(enabled: bool) -> Iterator[None]:
 
 @contextmanager
 def console_log() -> Iterator[None]:
-    """Affiche les messages `info` du paquet (ex. création des splits) pendant le bloc."""
+    """Affiche les messages `info` du paquet (ex. creation des splits) pendant le bloc."""
     logger, handler = logging.getLogger("latentopt"), logging.StreamHandler(sys.stdout)
     handler.setFormatter(logging.Formatter("  %(message)s"))
     level = logger.level
@@ -89,10 +89,10 @@ def main(argv: list[str] | None = None) -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     names = [*DATASETS, *WEIGHTS]
-    p.add_argument("names", nargs="*", help=f"parmi {', '.join(names)} (défaut : tous)")
-    p.add_argument("--force-splits", action="store_true", help="réécrit les JSON de splits")
+    p.add_argument("names", nargs="*", help=f"parmi {', '.join(names)} (defaut : tous)")
+    p.add_argument("--force-splits", action="store_true", help="reecrit les JSON de splits")
     p.add_argument(
-        "--force-download", action="store_true", help="supprime et re-télécharge les datasets"
+        "--force-download", action="store_true", help="supprime et re-telecharge les datasets"
     )
     p.add_argument("--verbose", action="store_true", help="affiche les barres de progression")
     args = p.parse_args(argv)
@@ -109,15 +109,15 @@ def main(argv: list[str] | None = None) -> None:
                 continue
             module = DATASETS[name]
             if not args.force_download and module.present(root):
-                print(f"[{name}] déjà présent dans {root}, utilisé tel quel", flush=True)
+                print(f"[{name}] deja present dans {root}, utilise tel quel", flush=True)
             else:
-                print(f"[{name}] téléchargement dans {root}", flush=True)
+                print(f"[{name}] telechargement dans {root}", flush=True)
                 start = time.perf_counter()
                 module.download(root, force=args.force_download)
                 if args.verbose:
-                    print(f"[{name}] téléchargé en {time.perf_counter() - start:.0f} s", flush=True)
+                    print(f"[{name}] telecharge en {time.perf_counter() - start:.0f} s", flush=True)
             if hasattr(module, "freeze_splits"):
-                module.freeze_splits(root, force=args.force_splits)  # dit lui-même ce qu'il fait
+                module.freeze_splits(root, force=args.force_splits)  # dit lui-meme ce qu'il fait
 
 
 if __name__ == "__main__":

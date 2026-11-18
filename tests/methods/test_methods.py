@@ -1,5 +1,5 @@
-"""Méthodes d'entraînement : LeJEPA (losses, sonde détachée, scheduler) et tête sur
-backbone gelé (le backbone ne bouge jamais)."""
+"""Methodes d'entrainement : LeJEPA (losses, sonde detachee, scheduler) et tete sur
+backbone gele (le backbone ne bouge jamais)."""
 
 import pytest
 import torch
@@ -100,7 +100,7 @@ def test_build_optimizer_warmup_then_cosine(lejepa):
     assert lrs[0] == pytest.approx(2e-5)  # 1 % du lr
     assert all(a < b for a, b in zip(lrs[:10], lrs[1:11], strict=True))  # warmup croissant
     assert lrs[10] == pytest.approx(2e-3)
-    assert all(a >= b for a, b in zip(lrs[10:], lrs[11:], strict=False))  # cosinus décroissant
+    assert all(a >= b for a, b in zip(lrs[10:], lrs[11:], strict=False))  # cosinus decroissant
     assert lrs[-1] == pytest.approx(1e-3, rel=1e-3)  # eta_min absolu
 
 
@@ -145,7 +145,7 @@ def test_frozen_training_step_never_updates_backbone(frozen):
 
 
 def test_frozen_neck_stays_fixed_and_only_the_head_learns(pyramid, recipe_head):
-    """Neck repris d'un entraînement précédent : eval(), sans gradient, hors de l'optimiseur."""
+    """Neck repris d'un entrainement precedent : eval(), sans gradient, hors de l'optimiseur."""
     torch.manual_seed(0)
     head = recipe_head("linear", pyramid, 10)
     module = FrozenBackboneModule(pyramid, head, get_task("synthetic_cls"), freeze_neck=True)

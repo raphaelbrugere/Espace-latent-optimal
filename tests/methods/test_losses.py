@@ -1,4 +1,4 @@
-"""Losses : SIGReg distingue N(0, I) d'un collapse ; losses supervisées cohérentes."""
+"""Losses : SIGReg distingue N(0, I) d'un collapse ; losses supervisees coherentes."""
 
 import pytest
 import torch
@@ -29,9 +29,9 @@ def test_sigreg_is_small_for_isotropic_gaussian(sigreg):
     "bad",
     [
         lambda z: torch.zeros_like(z),  # collapse
-        lambda z: 3 * z,  # trop dispersé
-        lambda z: 0.3 * z,  # trop concentré
-        lambda z: z + 1,  # décentré
+        lambda z: 3 * z,  # trop disperse
+        lambda z: 0.3 * z,  # trop concentre
+        lambda z: z + 1,  # decentre
     ],
     ids=["collapse", "scale_x3", "scale_x0.3", "shift"],
 )
@@ -61,11 +61,11 @@ def test_sigreg_draws_new_directions_at_each_call():
     torch.manual_seed(1)
     a = s(z)
     torch.manual_seed(1)
-    assert s(z) == a  # même graine : même résultat
+    assert s(z) == a  # meme graine : meme resultat
     assert s(z) != a  # tirage suivant : autres directions
 
 
-# --- Losses supervisées --------------------------------------------------------------------
+# --- Losses supervisees --------------------------------------------------------------------
 
 
 def test_resize_logits_is_noop_at_target_size():

@@ -1,4 +1,4 @@
-"""python -m latentopt.cli <commande> : équivalent de `lo`, sans le script installé."""
+"""python -m latentopt.cli <commande> : equivalent de `lo`, sans le script installe."""
 
 import sys
 

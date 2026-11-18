@@ -1,12 +1,12 @@
 """Smoke test de bout en bout, par les vraies commandes lo (python -m latentopt.cli, en
-sous-processus, comme en production) : pretrain -> train (neck + tête, puis tête sur un
-neck gelé) -> eval -> mlflow sync, le tout dans un seul dossier de backbone results/<run>/.
+sous-processus, comme en production) : pretrain -> train (neck + tete, puis tete sur un
+neck gele) -> eval -> mlflow sync, le tout dans un seul dossier de backbone results/<run>/.
 
-Remplace « lancer experiment=smoke avant tout job long » par une vérification
-automatique à chaque PR. Données synthétiques, CPU, résultats dans un dossier temporaire.
+Remplace " lancer experiment=smoke avant tout job long " par une verification
+automatique a chaque PR. Donnees synthetiques, CPU, resultats dans un dossier temporaire.
 
     pytest -m slow        # seulement ces tests
-    pytest -m "not slow"  # tout sauf ces tests (itération rapide en local)
+    pytest -m "not slow"  # tout sauf ces tests (iteration rapide en local)
 """
 
 import json
@@ -39,7 +39,7 @@ def tool(name: str, *overrides: str, root) -> None:
         f"cluster.data_root='{root}/data'",
         f"cluster.results_root='{root}/results'",
     ]
-    # stdin fermé : pas de terminal, donc pas de question « commit non poussé » (run.confirm_pushed)
+    # stdin ferme : pas de terminal, donc pas de question " commit non pousse " (run.confirm_pushed)
     proc = subprocess.run(
         args,
         cwd=PROJECT_ROOT,
@@ -48,7 +48,7 @@ def tool(name: str, *overrides: str, root) -> None:
         text=True,
         timeout=900,
     )
-    assert proc.returncode == 0, f"{name} a échoué :\n{proc.stdout[-3000:]}\n{proc.stderr[-3000:]}"
+    assert proc.returncode == 0, f"{name} a echoue :\n{proc.stdout[-3000:]}\n{proc.stderr[-3000:]}"
 
 
 def only(pattern: str, root):
@@ -63,19 +63,19 @@ def read(path):
 
 @pytest.fixture(scope="module")
 def pipeline(tmp_path_factory):
-    """Les étapes, une fois pour tous les tests du module."""
+    """Les etapes, une fois pour tous les tests du module."""
     root = tmp_path_factory.mktemp("pipeline")
     tool("pretrain", "experiment=smoke", root=root)
     run = only("results/synth-vit_s8-lejepa-*", root)
 
-    # backbone désigné par son nom, pas son chemin : retrouvé dans results/ par hub.locate
-    # (téléchargé depuis le Hub s'il manquait)
+    # backbone designe par son nom, pas son chemin : retrouve dans results/ par hub.locate
+    # (telecharge depuis le Hub s'il manquait)
     for task in TASKS:
         tool("train", "experiment=smoke_train", f"task={task}", "backbone=from_run",
              f"backbone.run={run.name}", "cache_features=false", root=root)  # fmt: skip
     trained = {t: only(f"downstream/{t}-*", run) for t in TASKS}
 
-    # tête neuve sur le neck fpn de synthetic_seg, gelé
+    # tete neuve sur le neck fpn de synthetic_seg, gele
     source = trained["synthetic_seg"]
     tool("train", "experiment=smoke_train", "task=synthetic_seg", "backbone=from_run",
          f"backbone.run={run.name}", f"neck_from={source.name}", "cache_features=false",
@@ -188,14 +188,14 @@ def test_every_run_has_its_own_mlflow_database(pipeline):
 
 
 def test_mlflow_sync_gathers_every_stage(pipeline):
-    """Après synchronisation : pretrain, 4 entraînements et 4 évaluations dans la base
-    d'équipe, terminés, reliés au même backbone ; une seconde synchronisation n'ajoute rien."""
+    """Apres synchronisation : pretrain, 4 entrainements et 4 evaluations dans la base
+    d'equipe, termines, relies au meme backbone ; une seconde synchronisation n'ajoute rien."""
     import mlflow
 
     results = pipeline["root"] / "results"
     sync = [sys.executable, "-m", "latentopt.cli", "mlflow", "sync", "--results", str(results),
             "--db", str(results / "mlflow.db"), "--no-hub"]  # fmt: skip
-    for expected in ("9 importés, 0 déjà présents", "0 importés, 9 déjà présents"):
+    for expected in ("9 importes, 0 deja presents", "0 importes, 9 deja presents"):
         proc = subprocess.run(sync, cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=300)
         assert proc.returncode == 0, proc.stderr
         assert expected in proc.stdout
@@ -219,7 +219,7 @@ def test_mlflow_sync_gathers_every_stage(pipeline):
     evals = runs("eval/default")
     assert len(evals) == 4 and all(r.data.tags["eval_split"] == "val" for r in evals)
     assert all(r.data.tags["results/backbone/sha256"] == sha for r in evals)
-    # chaque éval est reliée à son entraînement par le tag `downstream`
+    # chaque eval est reliee a son entrainement par le tag `downstream`
     links = {r.data.tags["downstream"] for r in evals}
     assert links == {r.data.tags["downstream"] for r in trained}
 

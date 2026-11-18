@@ -1,4 +1,4 @@
-"""Métriques : valeurs calculées à la main, accumulation par batch, cas limites."""
+"""Metriques : valeurs calculees a la main, accumulation par batch, cas limites."""
 
 import pytest
 import torch
@@ -29,7 +29,7 @@ def test_balanced_accuracy_averages_recall_per_class():
     # classe 0 : 3 exemples, 3 justes ; classe 1 : 1 exemple, faux ; classe 2 absente
     m.update(one_hot_logits([0, 0, 0, 0], 3), torch.tensor([0, 0, 0, 1]))
     out = m.compute()
-    assert out["balanced_acc"] == pytest.approx((1.0 + 0.0) / 2)  # classe absente ignorée
+    assert out["balanced_acc"] == pytest.approx((1.0 + 0.0) / 2)  # classe absente ignoree
     assert out["top1"] == pytest.approx(3 / 4)
 
 
@@ -49,7 +49,7 @@ def seg_logits(pred: torch.Tensor, k: int) -> torch.Tensor:
 
 def test_miou_perfect_prediction_is_one():
     y = torch.randint(0, 3, (2, 6, 6))
-    y[0, 0, :3] = torch.tensor([0, 1, 2])  # toutes les classes présentes
+    y[0, 0, :3] = torch.tensor([0, 1, 2])  # toutes les classes presentes
     m = M.MeanIoU(3)
     m.update(seg_logits(y, 3), y)
     assert m.compute()["miou"] == pytest.approx(1.0)
@@ -77,7 +77,7 @@ def test_miou_is_dataset_level_not_image_mean():
 def test_miou_upsamples_logits_to_native_mask_list():
     m = M.MeanIoU(2)
     logits = torch.zeros(2, 2, 4, 4)
-    logits[:, 1] = 1.0  # tout prédit en classe 1
+    logits[:, 1] = 1.0  # tout predit en classe 1
     masks = [torch.ones(8, 6, dtype=torch.long), torch.ones(5, 9, dtype=torch.long)]
     m.update(logits, masks)
     assert m.compute()["miou"] == pytest.approx(0.5)  # classe 0 jamais vue : IoU 0

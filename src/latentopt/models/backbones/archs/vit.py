@@ -1,15 +1,15 @@
 """ViT timm au contrat Backbone : `embed` + une carte de features par bloc lu.
 
 Un ViT simple n'a pas de pyramide : toutes les cartes sont au stride du patch. C'est la
-principale faiblesse de ce backbone pour les tâches denses (cf. simple feature pyramid
+principale faiblesse de ce backbone pour les taches denses (cf. simple feature pyramid
 de ViTDet, ou un ConvNet).
 
-`embed` est la sortie de `forward_head` de timm : pooling (token CLS par défaut), puis,
-si `embed_dim` est donné, une projection linéaire apprise avec le backbone pendant le
-pré-entraînement. `embed_dim=None` : pas de projection, `embed` = token CLS (largeur
-du ViT), comme dans le protocole d'évaluation de DINO.
+`embed` est la sortie de `forward_head` de timm : pooling (token CLS par defaut), puis,
+si `embed_dim` est donne, une projection lineaire apprise avec le backbone pendant le
+pre-entrainement. `embed_dim=None` : pas de projection, `embed` = token CLS (largeur
+du ViT), comme dans le protocole d'evaluation de DINO.
 
-Poids aléatoires uniquement : les poids externes sont chargés par `backbones/external/`.
+Poids aleatoires uniquement : les poids externes sont charges par `backbones/external/`.
 """
 
 import timm
@@ -18,7 +18,7 @@ from torch import Tensor
 
 
 class TimmViT(nn.Module):
-    """`blocks` : indices (0-based) des blocs dont on expose la carte, nommée `block{i+1}`.
+    """`blocks` : indices (0-based) des blocs dont on expose la carte, nommee `block{i+1}`.
 
     `forward` renvoie ces cartes (B, C, H/stride, W/stride) plus `embed` (B, embed_dim).
     """
@@ -38,7 +38,7 @@ class TimmViT(nn.Module):
             img_size=img_size,
             num_classes=embed_dim or 0,
             drop_path_rate=drop_path_rate,
-            dynamic_img_size=True,  # pré-entraînement et tâches à des résolutions différentes
+            dynamic_img_size=True,  # pre-entrainement et taches a des resolutions differentes
         )
         self.vit.set_grad_checkpointing(grad_checkpointing)
 

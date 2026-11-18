@@ -1,8 +1,8 @@
-"""Datasets générés, pour le smoke run, la CI et les tests : aucun fichier, CPU, quelques
-secondes. Mêmes formats de cible que les vrais datasets ; les scores n'ont aucun sens.
+"""Datasets generes, pour le smoke run, la CI et les tests : aucun fichier, CPU, quelques
+secondes. Memes formats de cible que les vrais datasets ; les scores n'ont aucun sens.
 
-Images de segmentation et de détection non carrées : elles exercent la métrique à
-résolution native et la normalisation des boîtes.
+Images de segmentation et de detection non carrees : elles exercent la metrique a
+resolution native et la normalisation des boites.
 """
 
 from collections.abc import Callable
@@ -13,9 +13,9 @@ from PIL import Image, ImageDraw
 
 from latentopt.data.datasets.base import Subset
 
-# CRITIQUE : nom court du dataset dans les noms de runs et de dépôts Hub. NE JAMAIS LE
-# MODIFIER : il renommerait tous les runs existants. Il doit aussi être DIFFÉRENT de celui
-# de tous les autres datasets (vérifié par tests/data/test_abbreviations.py).
+# CRITIQUE : nom court du dataset dans les noms de runs et de depots Hub. NE JAMAIS LE
+# MODIFIER : il renommerait tous les runs existants. Il doit aussi etre DIFFERENT de celui
+# de tous les autres datasets (verifie par tests/data/test_abbreviations.py).
 ABBREV = "synth"
 SIZES = {"train": 1000, "val": 150, "test": 300}
 SEEDS = {"train": 0, "val": 2, "test": 1}
@@ -36,7 +36,7 @@ class Shapes:
         return self.n
 
     def __getitem__(self, i: int) -> tuple[Image.Image, int]:
-        # Graine unique par (split, index) : `seed` diffère par split, i < 1_000_003.
+        # Graine unique par (split, index) : `seed` differe par split, i < 1_000_003.
         rng = np.random.RandomState(self.seed * 1_000_003 + i)
         label = i % self.k
         bg = np.clip(self.palette[label] + rng.randn(3) * 15, 0, 255)
@@ -50,7 +50,7 @@ class Shapes:
 
 
 class Blobs:
-    """Segmentation à 3 classes : ellipses colorées sur bruit, masque aligné."""
+    """Segmentation a 3 classes : ellipses colorees sur bruit, masque aligne."""
 
     palette = [(40, 40, 40), (220, 60, 60), (60, 200, 90)]
 
@@ -74,7 +74,7 @@ class Blobs:
 
 
 class Heads:
-    """Détection : une ellipse par image, classe = famille de couleur."""
+    """Detection : une ellipse par image, classe = famille de couleur."""
 
     palette = [(220, 80, 60), (60, 120, 220)]
 
@@ -93,7 +93,7 @@ class Heads:
         color = np.clip(np.array(self.palette[label]) + rng.randn(3) * 20, 0, 255)
         ImageDraw.Draw(img).ellipse([x, y, x + w, y + h], fill=tuple(int(c) for c in color))
         box = torch.tensor([x / w0, y / h0, (x + w) / w0, (y + h) / h0])
-        # box en coordonnées normalisées [0, 1] (x0, y0, x1, y1).
+        # box en coordonnees normalisees [0, 1] (x0, y0, x1, y1).
         return img, {"box": box, "label": label}
 
 

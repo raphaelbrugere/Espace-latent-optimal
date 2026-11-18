@@ -1,5 +1,5 @@
 # @package _global_
-# Machine personnelle. Environnement uniquement : rien qui change le résultat d'un run.
+# Machine personnelle. Environnement uniquement : rien qui change le resultat d'un run.
 defaults:
   - _base
   - _self_

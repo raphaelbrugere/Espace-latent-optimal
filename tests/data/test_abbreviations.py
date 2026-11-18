@@ -1,4 +1,4 @@
-"""Noms courts des datasets (ABBREV) : uniques, valides dans un nom de run, et figés."""
+"""Noms courts des datasets (ABBREV) : uniques, valides dans un nom de run, et figes."""
 
 import re
 
@@ -19,8 +19,8 @@ MODULES = {
     "synthetic": synthetic,
 }
 
-# Un nom court est un identifiant dans des dépôts publiés : le changer renomme les runs.
-# Si ce test échoue, c'est qu'un nom a changé ; l'actualiser ici doit être un choix assumé.
+# Un nom court est un identifiant dans des depots publies : le changer renomme les runs.
+# Si ce test echoue, c'est qu'un nom a change ; l'actualiser ici doit etre un choix assume.
 PINNED = {
     "imagenette": "imnt160",
     "flowers102": "fl102",
@@ -38,8 +38,8 @@ def test_abbreviations_are_unique():
 @pytest.mark.parametrize("name", MODULES)
 def test_abbreviation_is_a_valid_name_part(name):
     abbrev = MODULES[name].ABBREV
-    assert re.fullmatch(r"[a-z0-9]+", abbrev), f"{name} : {abbrev!r}"  # ni « - » ni « _ »
-    assert len(abbrev) <= 8, f"{name} : {abbrev!r} trop long pour être un nom court"
+    assert re.fullmatch(r"[a-z0-9]+", abbrev), f"{name} : {abbrev!r}"  # ni " - " ni " _ "
+    assert len(abbrev) <= 8, f"{name} : {abbrev!r} trop long pour etre un nom court"
 
 
 def test_abbreviations_are_pinned():
@@ -52,7 +52,7 @@ def test_imagenette_abbreviation_follows_its_size():
 
 @pytest.mark.parametrize("path", sorted(CONFIGS.glob("*.yaml")), ids=lambda p: p.stem)
 def test_every_pool_names_its_runs_with_its_abbreviation(path):
-    """Le <données> d'un nom de run vient du module du pool (data.source._target_)."""
+    """Le <donnees> d'un nom de run vient du module du pool (data.source._target_)."""
     target = OmegaConf.load(path).source._target_
     module = target.rpartition(".")[0].rpartition(".")[2]
     assert abbrev(target) == MODULES[module].ABBREV

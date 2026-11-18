@@ -1,4 +1,4 @@
-"""Contrat Backbone / Head : empreinte des poids, vérifications, sauvegarde des têtes."""
+"""Contrat Backbone / Head : empreinte des poids, verifications, sauvegarde des tetes."""
 
 import copy
 
@@ -108,7 +108,7 @@ def test_check_backbone_rejects_missing_map(pyramid):
 
 def test_check_backbone_enforces_param_budget(pyramid, monkeypatch):
     monkeypatch.setattr(contract, "BACKBONE_MAX_PARAMS", 10)
-    with pytest.raises(ValueError, match="paramètres"):
+    with pytest.raises(ValueError, match="parametres"):
         contract.check_backbone(pyramid)
 
 
@@ -116,7 +116,7 @@ def test_check_backbone_enforces_param_budget(pyramid, monkeypatch):
 
 
 def saved(pyramid, tmp_path, recipe_head):
-    """Neck et tête d'un même entraînement, sauvegardés séparément."""
+    """Neck et tete d'un meme entrainement, sauvegardes separement."""
     model = recipe_head("fpn", pyramid, 3, channels=8)
     neck_sha = contract.save_neck(model.neck, tmp_path / "neck.pt", pyramid, seed=3,
                                   config={"x": 1})  # fmt: skip
@@ -133,7 +133,7 @@ def test_neck_and_head_are_saved_separately_with_their_params(pyramid, tmp_path,
     assert neck["params"] == contract.count_params(model.neck) and neck["config"] == {"x": 1}
     assert head["params"] == contract.count_params(model.head)
     assert head["neck_sha256"] == neck_sha and head["backbone_sha256"] == sha
-    assert not any(k.startswith("neck") for k in head["state_dict"])  # la tête seule
+    assert not any(k.startswith("neck") for k in head["state_dict"])  # la tete seule
 
 
 def test_save_and_load_roundtrip(pyramid, tmp_path, recipe_head):

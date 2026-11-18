@@ -1,4 +1,4 @@
-"""Neck + tête par défaut : formes, clés lues, gradients."""
+"""Neck + tete par defaut : formes, cles lues, gradients."""
 
 import pytest
 import torch

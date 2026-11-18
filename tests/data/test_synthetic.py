@@ -1,4 +1,4 @@
-"""Datasets synthétiques (smoke run, CI) : déterministes et au format des vrais datasets."""
+"""Datasets synthetiques (smoke run, CI) : deterministes et au format des vrais datasets."""
 
 import numpy as np
 import pytest
@@ -28,7 +28,7 @@ def test_sources_are_deterministic_per_index_and_seed(make):
     img_a, img_b, img_o = a[5][0], b[5][0], other[5][0]
     assert np.array_equal(pixels(img_a), pixels(img_b))
     assert not np.array_equal(pixels(img_a), pixels(img_o))
-    # l'accès est sans état : relire un indice redonne la même image
+    # l'acces est sans etat : relire un indice redonne la meme image
     assert np.array_equal(pixels(a[5][0]), pixels(img_a))
 
 
@@ -44,7 +44,7 @@ def test_blobs_mask_is_aligned_and_has_three_classes():
     src = synthetic.Blobs(10, seed=0)
     for i in range(len(src)):
         img, mask = src[i]
-        assert img.size == mask.size == (96, 72)  # non carré, comme les vrais masques
+        assert img.size == mask.size == (96, 72)  # non carre, comme les vrais masques
         assert mask.mode == "L"
         assert set(np.unique(np.asarray(mask))) <= {0, 1, 2}
 

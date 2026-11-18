@@ -1,25 +1,25 @@
-"""Cache des features d'un backbone gelé, pour entraîner et évaluer des têtes sans
-recalculer le backbone à chaque epoch.
+"""Cache des features d'un backbone gele, pour entrainer et evaluer des tetes sans
+recalculer le backbone a chaque epoch.
 
-    data/features/<date de création>_<sha backbone[:16]>/
-    ├── info.json                                    backbone (config, origine), date
-    └── <tâche>/<split>[_flip]__<précision>__<clés>.pt
+    data/features/<date de creation>_<sha backbone[:16]>/
+    |-- info.json                                    backbone (config, origine), date
+    `-- <tache>/<split>[_flip]__<precision>__<cles>.pt
 
 - Dossier : la date (AAAA-MM-JJ_HH-MM-SS) le rend lisible et triable ; l'empreinte des
   poids permet de le retrouver (`*_<sha>`) : un backbone relit toujours ses propres
   features, jamais celles d'un autre.
 
-- Clés : seules les entrées lues par la tête (`head.in_keys`) sont stockées : `embed`
-  pèse ~2 Ko par image, les 4 cartes d'un ViT-S/8 en 128px ~0,8 Mo (fp16).
+- Cles : seules les entrees lues par la tete (`head.in_keys`) sont stockees : `embed`
+  pese ~2 Ko par image, les 4 cartes d'un ViT-S/8 en 128px ~0,8 Mo (fp16).
 - Augmentation : le retournement horizontal de la baseline (seg, det) ne commute pas avec
-  le backbone. Les deux variantes (jamais / toujours retournée) sont donc extraites, et
-  `CachedFeatures` tire à pile ou face à chaque passage, avec la probabilité du transform.
-  Même distribution d'augmentation que sans cache ; tirages différents (graine).
-- Précision : features stockées dans le dtype produit par le backbone (autocast), donc
-  sans perte par rapport à un calcul à la volée. Elle fait partie du nom de fichier : des
+  le backbone. Les deux variantes (jamais / toujours retournee) sont donc extraites, et
+  `CachedFeatures` tire a pile ou face a chaque passage, avec la probabilite du transform.
+  Meme distribution d'augmentation que sans cache ; tirages differents (graine).
+- Precision : features stockees dans le dtype produit par le backbone (autocast), donc
+  sans perte par rapport a un calcul a la volee. Elle fait partie du nom de fichier : des
   features fp32 ne sont jamais relues pour un run fp16.
-- Les transforms d'éval et la résolution font partie du protocole et ne sont pas dans la
-  clé : les modifier impose d'incrémenter FORMAT.
+- Les transforms d'eval et la resolution font partie du protocole et ne sont pas dans la
+  cle : les modifier impose d'incrementer FORMAT.
 """
 
 import copy
@@ -40,12 +40,12 @@ from latentopt.data.paths import features_root
 from latentopt.evaluation.tasks import Task
 
 log = logging.getLogger(__name__)
-FORMAT = 2  # 2 : précision dans le nom, dossier daté
+FORMAT = 2  # 2 : precision dans le nom, dossier date
 AUTOCAST = {"fp32": None, "fp16": torch.float16, "bf16": torch.bfloat16}
 
 
 def variants(transform: Any) -> dict[str, Any]:
-    """Transform à retournement aléatoire -> ses deux variantes déterministes."""
+    """Transform a retournement aleatoire -> ses deux variantes deterministes."""
     if not getattr(transform, "hflip", 0):
         return {"": transform}
     keep, flip = copy.copy(transform), copy.copy(transform)
@@ -54,7 +54,7 @@ def variants(transform: Any) -> dict[str, Any]:
 
 
 def backbone_dir(sha: str, info: dict | None = None) -> Path:
-    """Dossier du backbone : le dossier existant `*_<sha16>`, sinon un nouveau, daté."""
+    """Dossier du backbone : le dossier existant `*_<sha16>`, sinon un nouveau, date."""
     root = features_root()
     existing = sorted(root.glob(f"*_{sha[:16]}"))
     if existing:
@@ -88,7 +88,7 @@ def extract(
     device: torch.device,
     precision: str,
 ) -> dict[str, Any]:
-    """Features `keys` de tout le dataset (ordre conservé) et cibles, sous autocast."""
+    """Features `keys` de tout le dataset (ordre conserve) et cibles, sous autocast."""
     backbone = backbone.to(device).eval()
     dtype = AUTOCAST[precision]
     feats, targets = {k: [] for k in keys}, []
@@ -117,8 +117,8 @@ def load_or_extract(
     precision: str,
     info: dict | None = None,
 ) -> list[dict[str, Any]]:
-    """Une entrée par variante du transform ; extraite une fois, relue ensuite.
-    `info` (config et origine du backbone) va dans info.json à la création du dossier."""
+    """Une entree par variante du transform ; extraite une fois, relue ensuite.
+    `info` (config et origine du backbone) va dans info.json a la creation du dossier."""
     base = backbone_dir(sha, info)
     entries = []
     for variant, t in variants(transform).items():
@@ -127,7 +127,7 @@ def load_or_extract(
             entry = torch.load(path, map_location="cpu", weights_only=False, mmap=True)
             coherent = entry["backbone_sha256"] == sha and entry["format"] == FORMAT
             if not coherent or entry["meta"]["precision"] != precision:
-                raise ValueError(f"{path} : cache incohérent, le supprimer pour le recalculer")
+                raise ValueError(f"{path} : cache incoherent, le supprimer pour le recalculer")
         else:
             label = f"{task.name}/{split}" + (f" ({variant})" if variant else "")
             log.info("extraction des features %s -> %s", label, path)
@@ -148,8 +148,8 @@ def load_or_extract(
 
 
 class CachedFeatures(Dataset):
-    """(features d'une image, cible) depuis le cache ; variante retournée avec la
-    probabilité `hflip` du transform d'origine (aucun tirage s'il n'y a qu'une variante)."""
+    """(features d'une image, cible) depuis le cache ; variante retournee avec la
+    probabilite `hflip` du transform d'origine (aucun tirage s'il n'y a qu'une variante)."""
 
     def __init__(self, entries: list[dict], hflip: float = 0.0) -> None:
         self.entries, self.hflip = entries, hflip
@@ -165,7 +165,7 @@ class CachedFeatures(Dataset):
 
 
 def collate(native_targets: bool) -> Callable[[list], tuple[dict[str, Tensor], Any]]:
-    """Features empilées ; cibles empilées, ou laissées en liste (masques à résolution native)."""
+    """Features empilees ; cibles empilees, ou laissees en liste (masques a resolution native)."""
 
     def fn(batch: list) -> tuple[dict[str, Tensor], Any]:
         feats = default_collate([f for f, _ in batch])

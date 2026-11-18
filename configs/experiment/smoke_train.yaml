@@ -1,5 +1,5 @@
 # @package _global_
-# Smoke run de `lo train` : neck et tête sur un ViT-S/8 à poids aléatoires, données synthétiques.
+# Smoke run de `lo train` : neck et tete sur un ViT-S/8 a poids aleatoires, donnees synthetiques.
 #
 #   lo train experiment=smoke_train
 #   lo train experiment=smoke_train task=synthetic_cls,synthetic_seg,synthetic_det -m

@@ -1,10 +1,10 @@
-"""Fixtures communes. Aucun test ne touche au réseau, aux vrais datasets ni à data/ :
+"""Fixtures communes. Aucun test ne touche au reseau, aux vrais datasets ni a data/ :
 DATA_ROOT et FEATURES_ROOT pointent vers un dossier temporaire pour chaque test, et
-MLFLOW_TRACKING_URI est retiré (le suivi MLflow va dans le dossier de résultats du test).
+MLFLOW_TRACKING_URI est retire (le suivi MLflow va dans le dossier de resultats du test).
 
 Deux backbones de test, tous deux au contrat de `models/contract.py` :
 - `tiny_vit` : un vrai `TimmViT` (vit_tiny, patch 16), cartes iso-stride ;
-- `pyramid` : un ConvNet jouet à deux strides (4, 8), pour les têtes multi-échelles.
+- `pyramid` : un ConvNet jouet a deux strides (4, 8), pour les tetes multi-echelles.
 """
 
 from pathlib import Path
@@ -27,7 +27,7 @@ TINY_VIT = {
 
 
 class PyramidBackbone(nn.Module):
-    """ConvNet jouet au contrat : cartes aux strides 4 et 8, `embed` poolé puis projeté."""
+    """ConvNet jouet au contrat : cartes aux strides 4 et 8, `embed` poole puis projete."""
 
     def __init__(self, embed_dim: int = 16):
         super().__init__()
@@ -48,13 +48,13 @@ class PyramidBackbone(nn.Module):
 
 @pytest.fixture(autouse=True)
 def isolated_data(tmp_path, monkeypatch) -> Path:
-    """Chaque test a son propre DATA_ROOT : le cache de features n'écrit jamais dans data/."""
+    """Chaque test a son propre DATA_ROOT : le cache de features n'ecrit jamais dans data/."""
     root = tmp_path / "data"
     monkeypatch.setenv("DATA_ROOT", str(root))
     monkeypatch.delenv("FEATURES_ROOT", raising=False)
     monkeypatch.delenv("MODELS_ROOT", raising=False)
-    # jamais le serveur de l'utilisateur ; setenv puis delenv : la valeur est aussi retirée à la
-    # fin du test si quelque chose l'a définie entre-temps (elle fuirait vers les tests suivants)
+    # jamais le serveur de l'utilisateur ; setenv puis delenv : la valeur est aussi retiree a la
+    # fin du test si quelque chose l'a definie entre-temps (elle fuirait vers les tests suivants)
     monkeypatch.setenv("MLFLOW_TRACKING_URI", "")
     monkeypatch.delenv("MLFLOW_TRACKING_URI")
     return root
@@ -86,7 +86,7 @@ def configs_dir() -> str:
     return str(PROJECT_ROOT / "configs")
 
 
-# couples neck + tête de la baseline, par famille de tâche (evaluation/tasks.py)
+# couples neck + tete de la baseline, par famille de tache (evaluation/tasks.py)
 PAIRS = {
     "linear": ("embed_norm", "linear"),
     "fpn": ("fpn", "conv_seg"),
@@ -96,8 +96,8 @@ PAIRS = {
 
 @pytest.fixture
 def recipe_head():
-    """Neck + tête d'un couple de PAIRS (configs/neck/, configs/head/), hyperparamètres du
-    neck surchargeables (comme `neck.<clé>=…` en ligne de commande)."""
+    """Neck + tete d'un couple de PAIRS (configs/neck/, configs/head/), hyperparametres du
+    neck surchargeables (comme `neck.<cle>=...` en ligne de commande)."""
     from omegaconf import OmegaConf
 
     from latentopt.models import recipe

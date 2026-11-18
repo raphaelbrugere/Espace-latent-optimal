@@ -1,4 +1,4 @@
-"""Têtes downstream : chacune lit la sortie d'un neck (voir models/necks/). Un neck et une tête
+"""Tetes downstream : chacune lit la sortie d'un neck (voir models/necks/). Un neck et une tete
 forment une recette (configs/head/, models/recipe.py)."""
 
 from latentopt.models.heads.fpn import ConvSegHead

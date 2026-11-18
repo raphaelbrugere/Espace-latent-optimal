@@ -1,5 +1,5 @@
-"""Cache de features : identique au calcul à la volée, relu sans recalcul, jamais
-partagé entre backbones ou précisions, augmentation par retournement préservée."""
+"""Cache de features : identique au calcul a la volee, relu sans recalcul, jamais
+partage entre backbones ou precisions, augmentation par retournement preservee."""
 
 import random
 
@@ -25,7 +25,7 @@ def test_variants_with_flip_gives_two_deterministic_copies():
     v = Fe.variants(t)
     assert set(v) == {"", "flip"}
     assert v[""].hflip == 0.0 and v["flip"].hflip == 1.0
-    assert t.hflip == 0.5  # l'original n'est pas modifié
+    assert t.hflip == 0.5  # l'original n'est pas modifie
 
 
 def test_cache_path_encodes_split_variant_precision_and_keys(tmp_path):
@@ -57,7 +57,7 @@ def test_extract_matches_backbone_outputs_in_order(pyramid):
 
 @pytest.fixture
 def small_task(monkeypatch):
-    """synthetic_det réduit à 12 images par split (rapide)."""
+    """synthetic_det reduit a 12 images par split (rapide)."""
     from latentopt.data.datasets import synthetic
 
     monkeypatch.setattr(synthetic, "SIZES", {"train": 12, "val": 12, "test": 12})
@@ -76,9 +76,9 @@ def test_load_or_extract_extracts_once_then_reads(pyramid, small_task, monkeypat
     monkeypatch.setattr(Fe, "extract", lambda *a, **k: calls.append(1) or real(*a, **k))
 
     first = call(pyramid, small_task)
-    assert len(calls) == 2  # train : variantes normale et retournée
+    assert len(calls) == 2  # train : variantes normale et retournee
     second = call(pyramid, small_task)
-    assert len(calls) == 2  # relu, pas recalculé
+    assert len(calls) == 2  # relu, pas recalcule
     for a, b in zip(first, second, strict=True):
         assert torch.equal(a["feats"]["c8"], b["feats"]["c8"])
         assert a["meta"] == b["meta"]
@@ -109,7 +109,7 @@ def test_incoherent_cache_is_refused(pyramid, small_task):
     entry = torch.load(path, weights_only=False)
     entry["backbone_sha256"] = "0" * 64
     torch.save(entry, path)
-    with pytest.raises(ValueError, match="incohérent"):
+    with pytest.raises(ValueError, match="incoherent"):
         call(pyramid, small_task, split="val", transform=small_task.eval_transform)
 
 

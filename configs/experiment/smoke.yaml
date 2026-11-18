@@ -1,6 +1,6 @@
 # @package _global_
-# Smoke run : vérifie le pipeline de bout en bout en ~1 min (CPU), avant tout job long.
-# Données synthétiques, scores sans signification.
+# Smoke run : verifie le pipeline de bout en bout en ~1 min (CPU), avant tout job long.
+# Donnees synthetiques, scores sans signification.
 #
 #   lo pretrain experiment=smoke
 #   lo pretrain experiment=smoke cluster=dce method.precision=fp16 \

@@ -1,1 +1,1 @@
-"""Traçabilité et stockage : lo hub push|pull, lo mlflow sync."""
+"""Tracabilite et stockage : lo hub push|pull, lo mlflow sync."""

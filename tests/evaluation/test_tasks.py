@@ -1,5 +1,5 @@
-"""Registre des tâches : cohérence de chaque tâche, et chaîne complète
-dataset -> tête par défaut -> loss -> métrique sur les tâches synthétiques."""
+"""Registre des taches : coherence de chaque tache, et chaine complete
+dataset -> tete par defaut -> loss -> metrique sur les taches synthetiques."""
 
 import pytest
 import torch
@@ -29,9 +29,9 @@ def test_task_is_consistent(name):
     assert (PROJECT_ROOT / "configs" / "neck" / f"{t.default_neck}.yaml").exists()
     assert (PROJECT_ROOT / "configs" / "head" / f"{t.default_head}.yaml").exists()
     assert t.epochs > 0 and t.num_classes > 1
-    # les transforms d'éval sont déterministes
+    # les transforms d'eval sont deterministes
     assert getattr(t.eval_transform, "hflip", 0.0) == 0.0
-    # Task est figé : le protocole ne se modifie pas à l'exécution
+    # Task est fige : le protocole ne se modifie pas a l'execution
     with pytest.raises(AttributeError):
         t.epochs = 1
 
@@ -55,7 +55,7 @@ def test_galaxy_uses_balanced_accuracy():
 
 @pytest.mark.parametrize("name", SYNTHETIC)
 def test_synthetic_task_end_to_end(name, pyramid):
-    """Dataset -> backbone -> tête par défaut -> loss (gradient) -> métrique principale."""
+    """Dataset -> backbone -> tete par defaut -> loss (gradient) -> metrique principale."""
     t = tasks.get_task(name)
     neck_cfg, head_cfg = recipe.load("neck", t.default_neck), recipe.load("head", t.default_head)
     head = recipe.build(neck_cfg, head_cfg, pyramid, t.num_classes)

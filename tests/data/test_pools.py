@@ -1,5 +1,5 @@
-"""Pools de pré-entraînement (configs/data/) : chaque YAML est cohérent avec le code (fonction
-source, tâche et classes de la sonde, résolution) et se compose dans `lo pretrain`."""
+"""Pools de pre-entrainement (configs/data/) : chaque YAML est coherent avec le code (fonction
+source, tache et classes de la sonde, resolution) et se compose dans `lo pretrain`."""
 
 import pytest
 from hydra import compose, initialize_config_dir
@@ -66,7 +66,7 @@ def test_pool_composes_for_pretraining(name):
 
 
 def test_pretraining_without_probe_has_no_validation():
-    """Pool sans tâche de classification (Pets) : ni sonde, ni DataLoader de validation."""
+    """Pool sans tache de classification (Pets) : ni sonde, ni DataLoader de validation."""
     from latentopt.cli.run.pretrain import build
 
     cfg = compose_pretrain([

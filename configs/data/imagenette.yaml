@@ -1,8 +1,8 @@
-# Pool de pré-entraînement du protocole : train officiel d'Imagenette, sans labels
-# (les labels ne servent qu'à la sonde en ligne, sur embeddings détachés).
-# Prérequis : lo data prepare imagenette
+# Pool de pre-entrainement du protocole : train officiel d'Imagenette, sans labels
+# (les labels ne servent qu'a la sonde en ligne, sur embeddings detaches).
+# Prerequis : lo data prepare imagenette
 source:
   _target_: latentopt.data.datasets.imagenette.pretraining_images
 img_size: 128
 num_probe_classes: 10
-probe_task: imagenette_cls # val de la sonde en ligne (holdout 5 % du train, transform d'éval)
+probe_task: imagenette_cls # val de la sonde en ligne (holdout 5 % du train, transform d'eval)

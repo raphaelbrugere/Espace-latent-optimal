@@ -1,13 +1,13 @@
-"""Emplacement des données, résolu depuis la racine du projet et non depuis le cwd.
+"""Emplacement des donnees, resolu depuis la racine du projet et non depuis le cwd.
 
-    DATA_ROOT        défaut <racine>/data, ignoré par git
-    ├── datasets/    sources téléchargées par `lo data prepare`
-    ├── features/    features mises en cache    (FEATURES_ROOT pour le déplacer)
-    ├── models/      poids externes téléchargés (MODELS_ROOT pour le déplacer)
-    ├── mlflow.db    base MLflow d'équipe, remplie par `lo mlflow sync`
-    └── mlflow_hub/  bases MLflow des dépôts du Hub, téléchargées par `lo mlflow sync`
+    DATA_ROOT        defaut <racine>/data, ignore par git
+    |-- datasets/    sources telechargees par `lo data prepare`
+    |-- features/    features mises en cache    (FEATURES_ROOT pour le deplacer)
+    |-- models/      poids externes telecharges (MODELS_ROOT pour le deplacer)
+    |-- mlflow.db    base MLflow d'equipe, remplie par `lo mlflow sync`
+    `-- mlflow_hub/  bases MLflow des depots du Hub, telechargees par `lo mlflow sync`
 
-La racine est déduite de l'emplacement du paquet : valable en installation éditable
+La racine est deduite de l'emplacement du paquet : valable en installation editable
 (`uv sync`), qui est le mode d'installation du projet.
 """
 
@@ -18,7 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]  # src/latentopt/data/paths.p
 
 
 def data_root() -> Path:
-    """`DATA_ROOT` s'il est défini, sinon `<racine>/data` ; chemin absolu."""
+    """`DATA_ROOT` s'il est defini, sinon `<racine>/data` ; chemin absolu."""
     return Path(os.environ.get("DATA_ROOT", PROJECT_ROOT / "data")).resolve()
 
 

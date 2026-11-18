@@ -1,10 +1,10 @@
-# ViT-S/8 à poids aléatoires : backbone de la baseline (exemple minimal LeJEPA).
-# 21,7M paramètres ; 4 cartes au stride 8 (pas de pyramide).
+# ViT-S/8 a poids aleatoires : backbone de la baseline (exemple minimal LeJEPA).
+# 21,7M parametres ; 4 cartes au stride 8 (pas de pyramide).
 _target_: latentopt.models.backbones.archs.vit.TimmViT
 
 arch: vit_small_patch8_224 # architecture timm
-img_size: ${oc.select:data.img_size,128} # pré-entraînement : celle des données ; 128 sinon (têtes)
-embed_dim: 512 # projection apprise après le pooling ; null = token CLS (384)
-blocks: [2, 5, 8, 11] # blocs exposés comme cartes de features (indices à partir de 0)
+img_size: ${oc.select:data.img_size,128} # pre-entrainement : celle des donnees ; 128 sinon (tetes)
+embed_dim: 512 # projection apprise apres le pooling ; null = token CLS (384)
+blocks: [2, 5, 8, 11] # blocs exposes comme cartes de features (indices a partir de 0)
 drop_path_rate: 0.1
-grad_checkpointing: false # true : moins de mémoire GPU, ~30 % plus lent, même résultat
+grad_checkpointing: false # true : moins de memoire GPU, ~30 % plus lent, meme resultat

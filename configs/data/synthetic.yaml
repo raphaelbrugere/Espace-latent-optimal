@@ -1,4 +1,4 @@
-# Images générées, sans fichier ni réseau : smoke run et CI. Scores sans signification.
+# Images generees, sans fichier ni reseau : smoke run et CI. Scores sans signification.
 source:
   _target_: latentopt.data.datasets.synthetic.pretraining_images
   num_classes: 10

@@ -1,4 +1,4 @@
-# Tête soft_argmax : boîte par soft-argmax sur une carte (neck conv_trunk), détection.
-# Fournis à l'exécution : in_dim (neck) et num_classes (tâche).
+# Tete soft_argmax : boite par soft-argmax sur une carte (neck conv_trunk), detection.
+# Fournis a l'execution : in_dim (neck) et num_classes (tache).
 _target_: latentopt.models.heads.SoftArgmaxDecoder
 _partial_: true

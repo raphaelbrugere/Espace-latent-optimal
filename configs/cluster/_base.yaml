@@ -1,8 +1,8 @@
 # @package _global_
-# Base des configs cluster (defaults de local, ci, dce) : pas un cluster à choisir seul.
-# DATA_ROOT / OUTPUT_ROOT déplacent données et résultats (ex. disque partagé du DCE).
+# Base des configs cluster (defaults de local, ci, dce) : pas un cluster a choisir seul.
+# DATA_ROOT / OUTPUT_ROOT deplacent donnees et resultats (ex. disque partage du DCE).
 cluster:
-  name: ??? # chaque cluster le définit
+  name: ??? # chaque cluster le definit
   data_root: ${oc.env:DATA_ROOT,${project_root:}/data}
   results_root: ${oc.env:OUTPUT_ROOT,${project_root:}/results}
-  mlflow: true # base MLflow par run (<run>/mlflow.db) ; false : désactivé
+  mlflow: true # base MLflow par run (<run>/mlflow.db) ; false : desactive

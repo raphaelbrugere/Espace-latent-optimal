@@ -1,5 +1,5 @@
-"""La coupe neck / tête ne change rien au calcul : les couples livrés (configs/neck/, configs/head/)
-reproduisent les anciennes têtes monolithiques, mêmes poids initiaux et mêmes sorties."""
+"""La coupe neck / tete ne change rien au calcul : les couples livres (configs/neck/, configs/head/)
+reproduisent les anciennes tetes monolithiques, memes poids initiaux et memes sorties."""
 
 import pytest
 import torch
@@ -23,7 +23,7 @@ def from_recipe(name, backbone, num_classes, **neck):
 
 
 def strip(key: str) -> str:
-    """`neck.lateral.0.weight` -> `lateral.0.weight` : clé de l'ancienne tête monolithique."""
+    """`neck.lateral.0.weight` -> `lateral.0.weight` : cle de l'ancienne tete monolithique."""
     return key.removeprefix("neck.").removeprefix("head.")
 
 
@@ -35,7 +35,7 @@ def feats(pyramid, batch=2):
 def build_pair(make_legacy, make_new, seed=7):
     torch.manual_seed(seed)
     old = make_legacy()
-    torch.manual_seed(seed)  # même graine : l'ordre de création des couches doit être le même
+    torch.manual_seed(seed)  # meme graine : l'ordre de creation des couches doit etre le meme
     return old, make_new()
 
 
@@ -72,7 +72,7 @@ def test_same_initial_weights_under_the_same_seed(pyramid, case):
     legacy, new = CASES[case]
     old, composed = build_pair(lambda: legacy(pyramid), lambda: new(pyramid))
     new_state = {strip(k): v for k, v in composed.state_dict().items()}
-    assert list(new_state) == list(old.state_dict())  # mêmes clés, même ordre
+    assert list(new_state) == list(old.state_dict())  # memes cles, meme ordre
     for key, value in old.state_dict().items():
         assert torch.equal(new_state[key], value), key
 
@@ -96,7 +96,7 @@ def test_same_outputs_and_params(pyramid, case):
 
 
 def test_same_defaults_as_the_legacy_heads(pyramid):
-    """Recettes sans surcharge = anciennes têtes avec leurs valeurs par défaut."""
+    """Recettes sans surcharge = anciennes tetes avec leurs valeurs par defaut."""
     for legacy, name, k in (
         (lambda: LegacyLinear(pyramid.embed_dim, 5), "linear", 5),
         (lambda: LegacyFPN(pyramid.feature_info, 3), "fpn", 3),
@@ -107,7 +107,7 @@ def test_same_defaults_as_the_legacy_heads(pyramid):
 
 
 def test_same_training_step_for_a_head_with_batchnorm(pyramid):
-    """Mode train : les statistiques BatchNorm du neck évoluent comme dans l'ancienne tête."""
+    """Mode train : les statistiques BatchNorm du neck evoluent comme dans l'ancienne tete."""
     old, composed = build_pair(
         lambda: LegacySoftArgmax(pyramid.feature_info, 2, channels=8),
         lambda: from_recipe("soft_argmax", pyramid, 2, channels=8),
@@ -118,7 +118,7 @@ def test_same_training_step_for_a_head_with_batchnorm(pyramid):
     assert torch.equal(old.bn1.running_mean, composed.neck.bn1.running_mean)
 
 
-# --- Downstream et compatibilité neck / tête -----------------------------------------------
+# --- Downstream et compatibilite neck / tete -----------------------------------------------
 
 
 def test_downstream_exposes_the_neck_keys_and_one_state_dict(pyramid):
@@ -135,7 +135,7 @@ def test_incompatible_neck_and_head_fail_early(pyramid):
 
 
 def test_embed_norm_without_norm_is_the_identity_on_embed(pyramid):
-    """Le cas « pas de neck » d'origine : sonde linéaire stricte, `embed` rendu tel quel."""
+    """Le cas " pas de neck " d'origine : sonde lineaire stricte, `embed` rendu tel quel."""
     x = feats(pyramid)
     neck = EmbedNorm(pyramid.embed_dim, norm=False)
     assert neck.in_keys == ["embed"] and neck.out_kind == "vector"

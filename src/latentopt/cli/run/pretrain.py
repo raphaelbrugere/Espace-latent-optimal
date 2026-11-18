@@ -1,12 +1,12 @@
-"""Pré-entraînement d'un backbone (configs/pretrain.yaml).
+"""Pre-entrainement d'un backbone (configs/pretrain.yaml).
 
     lo pretrain experiment=smoke                     # smoke run, CPU, ~1 min
     lo pretrain backbone=vit_s8                      # local
     lo pretrain experiment=<nom> cluster=dce -m      # job Slurm
 
-Le run écrit dans results/<données>-<archi>-<méthode>-<date>/backbone/ (voir latentopt/run.py
-et latentopt/hub.py), et est suivi dans MLflow (expérience pretrain/<experiment_name>).
-Les entraînements downstream de ce backbone iront dans le même dossier results/<run>/.
+Le run ecrit dans results/<donnees>-<archi>-<methode>-<date>/backbone/ (voir latentopt/run.py
+et latentopt/hub.py), et est suivi dans MLflow (experience pretrain/<experiment_name>).
+Les entrainements downstream de ce backbone iront dans le meme dossier results/<run>/.
 """
 
 import logging
@@ -47,9 +47,9 @@ def build(cfg: DictConfig) -> tuple[LeJEPAModule, DataLoader, DataLoader | None]
         num_workers=workers,
         persistent_workers=workers > 0,
     )
-    # val de la sonde en ligne ; probe_task null (pool sans tâche de classification) : pas de
-    # sonde, donc pas de validation. Non persistant, à garder : recréer ses workers à
-    # chaque epoch tire un nombre aléatoire, et le rendre persistant décalerait l'aléa
+    # val de la sonde en ligne ; probe_task null (pool sans tache de classification) : pas de
+    # sonde, donc pas de validation. Non persistant, a garder : recreer ses workers a
+    # chaque epoch tire un nombre aleatoire, et le rendre persistant decalerait l'alea
     probe_task = cfg.data.get("probe_task")
     val = (
         DataLoader(get_task(probe_task).dataset("val"), batch_size=256, num_workers=workers)
@@ -64,14 +64,14 @@ def build(cfg: DictConfig) -> tuple[LeJEPAModule, DataLoader, DataLoader | None]
 
 @hydra.main(version_base="1.3", config_path=CONFIGS_DIR, config_name="pretrain")
 def main(cfg: DictConfig) -> None:
-    # la config fait foi pour l'emplacement des données (lu par latentopt.data.paths)
+    # la config fait foi pour l'emplacement des donnees (lu par latentopt.data.paths)
     os.environ["DATA_ROOT"] = cfg.cluster.data_root
-    os.environ["OUTPUT_ROOT"] = cfg.cluster.results_root  # runs désignés par leur nom (hub.locate)
+    os.environ["OUTPUT_ROOT"] = cfg.cluster.results_root  # runs designes par leur nom (hub.locate)
     run_dir = Path(HydraConfig.get().runtime.output_dir)
     git = run.prepare(cfg, run_dir)
     settings = run.lightning_settings(cfg.cluster.device, cfg.method.precision)
     mlflow = run.mlflow_logger(cfg, "pretrain", run_dir, git)
-    # torch.manual_seed, plus random et numpy ; workers seedés par torch
+    # torch.manual_seed, plus random et numpy ; workers seedes par torch
     L.seed_everything(cfg.seed, workers=False)
 
     module, train, val = build(cfg)
@@ -90,7 +90,7 @@ def main(cfg: DictConfig) -> None:
         devices=1,
         **settings,
     )
-    log.info("Trainer %s | %d images de pré-entraînement", settings, len(train.dataset))
+    log.info("Trainer %s | %d images de pre-entrainement", settings, len(train.dataset))
 
     t0 = time.time()
     trainer.fit(module, train, val, ckpt_path=cfg.resume)

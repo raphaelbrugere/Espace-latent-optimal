@@ -1,12 +1,12 @@
-"""Configs nommées des necks et des têtes, et leur construction sur un backbone.
+"""Configs nommees des necks et des tetes, et leur construction sur un backbone.
 
     configs/neck/<nom>.yaml   config partielle d'un neck (models/necks/)
-    configs/head/<nom>.yaml   config partielle d'une tête (models/heads/)
+    configs/head/<nom>.yaml   config partielle d'une tete (models/heads/)
 
-Leurs noms sont les parties <neck> et <tête> du dossier d'entraînement
-(downstream/<tâche>-<neck>-<tête>-<date>/, voir docs/HUB.md). Pour essayer
+Leurs noms sont les parties <neck> et <tete> du dossier d'entrainement
+(downstream/<tache>-<neck>-<tete>-<date>/, voir docs/HUB.md). Pour essayer
 une variante : `neck.channels=128` en ligne de commande (le dossier garde le nom du neck) ;
-une variante retenue mérite sa propre config, donc son propre nom.
+une variante retenue merite sa propre config, donc son propre nom.
 """
 
 from pathlib import Path
@@ -43,13 +43,13 @@ def build_neck(cfg: DictConfig, backbone: nn.Module) -> nn.Module:
 
 
 def build_head(cfg: DictConfig, neck: nn.Module, num_classes: int) -> nn.Module:
-    """Tête de cette config, sur la sortie de ce neck ; ValueError si les formes diffèrent."""
+    """Tete de cette config, sur la sortie de ce neck ; ValueError si les formes different."""
     head = make_head(instantiate(cfg), neck, num_classes)
     check_pair(neck, head)
     return head
 
 
 def build(neck: DictConfig, head: DictConfig, backbone: nn.Module, num_classes: int) -> Downstream:
-    """Neck puis tête, construits dans cet ordre (il fixe l'init sous une graine donnée)."""
+    """Neck puis tete, construits dans cet ordre (il fixe l'init sous une graine donnee)."""
     built = build_neck(neck, backbone)
     return Downstream(built, build_head(head, built, num_classes))

@@ -1,6 +1,6 @@
 # @package _global_
-# Réglages Hydra communs aux points d'entrée (pretrain, train, eval), en tête de leurs defaults.
-# Chacun ne définit ensuite que ses dossiers (hydra.run.dir, hydra.sweep).
+# Reglages Hydra communs aux points d'entree (pretrain, train, eval), en tete de leurs defaults.
+# Chacun ne definit ensuite que ses dossiers (hydra.run.dir, hydra.sweep).
 hydra:
   job:
     chdir: false # le code tourne depuis le dossier de lancement

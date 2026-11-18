@@ -1,4 +1,4 @@
-"""Backbones : TimmViT au contrat, rechargement d'un run (`from_run`) vérifié par empreinte."""
+"""Backbones : TimmViT au contrat, rechargement d'un run (`from_run`) verifie par empreinte."""
 
 import json
 
@@ -47,7 +47,7 @@ def test_vit_is_deterministic_in_eval():
 
 def test_vit_rebuilt_from_config_and_state_dict_is_identical(tiny_vit, tiny_vit_cfg):
     kwargs = {k: v for k, v in tiny_vit_cfg.items() if k != "_target_"}
-    torch.manual_seed(123)  # autre init, écrasée par le state_dict
+    torch.manual_seed(123)  # autre init, ecrasee par le state_dict
     clone = TimmViT(**kwargs).eval()
     clone.load_state_dict(tiny_vit.state_dict())
     assert weights_hash(clone) == weights_hash(tiny_vit)
@@ -75,7 +75,7 @@ BB = "synth-vit_tiny-test-20261116_183012"
 @pytest.fixture
 def pretrain_run(tmp_path, tiny_vit, tiny_vit_cfg):
     """Dossier backbone/ d'un run, au format de latentopt/run.py (config.yaml, backbone.pt,
-    results.json), à l'emplacement de latentopt/hub.py (results/<run>/backbone/)."""
+    results.json), a l'emplacement de latentopt/hub.py (results/<run>/backbone/)."""
     run_dir = tmp_path / "results" / BB / "backbone"
     run_dir.mkdir(parents=True)
     OmegaConf.save(OmegaConf.create({"backbone": tiny_vit_cfg}), run_dir / "config.yaml")
@@ -115,7 +115,7 @@ def test_from_run_requires_a_finished_run(pretrain_run, missing):
 
 def test_from_run_refuses_weights_in_another_architecture(pretrain_run):
     cfg = OmegaConf.load(pretrain_run / "config.yaml")
-    cfg.backbone.embed_dim = 32  # projection de taille différente
+    cfg.backbone.embed_dim = 32  # projection de taille differente
     OmegaConf.save(cfg, pretrain_run / "config.yaml")
     with pytest.raises(RuntimeError):
         from_run(str(pretrain_run))
@@ -124,5 +124,5 @@ def test_from_run_refuses_weights_in_another_architecture(pretrain_run):
 def test_resolve_run_accepts_the_run_folder_its_name_or_a_folder_inside(pretrain_run, monkeypatch):
     monkeypatch.setenv("OUTPUT_ROOT", str(pretrain_run.parents[1]))
     root = pretrain_run.parent
-    for run_ref in (root, pretrain_run, BB, f"{BB}/backbone"):  # existants : sans réseau
+    for run_ref in (root, pretrain_run, BB, f"{BB}/backbone"):  # existants : sans reseau
         assert resolve_run(run_ref) == pretrain_run, run_ref

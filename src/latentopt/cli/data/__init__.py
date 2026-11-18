@@ -1,1 +1,1 @@
-"""Préparation des données : lo data prepare."""
+"""Preparation des donnees : lo data prepare."""

@@ -1,28 +1,28 @@
-"""Dossier de run, commun à `lo pretrain` (results/<run>/backbone/), `lo train`
-(results/<run>/downstream/<tâche>-<neck>-<tête>-<date>/) et `lo eval`
+"""Dossier de run, commun a `lo pretrain` (results/<run>/backbone/), `lo train`
+(results/<run>/downstream/<tache>-<neck>-<tete>-<date>/) et `lo eval`
 (<dossier downstream>/eval/<split>-<date>/), voir latentopt/hub.py.
 
     <run_dir>/
-    ├── config.yaml     config complète résolue (se suffit à elle-même)
-    ├── git.txt         commit, branche, fichiers non commités
-    ├── lineage.json    empreintes de uv.lock (environnement) et des splits figés (données)
-    ├── run.log         avancement (handler fichier de Hydra + LogProgress) ; pas pour eval
-    ├── metrics.csv     métriques par pas et par epoch (CSVLogger de Lightning) ; pas pour eval
-    ├── checkpoints/    last.ckpt : reprise d'un run interrompu
-    ├── backbone.pt     state_dict du backbone (save_backbone) ; neck.pt et head.pt pour `lo train`
-    ├── README.md       fiche du dossier (hub.write_card), pour backbone/ et downstream/<…>
-    ├── results.json    empreintes, paramètres, résultats finaux ; écrit en dernier
-    └── mlflow.db       suivi MLflow du run : config, courbes, résultats, tags (mlflow_logger)
+    |-- config.yaml     config complete resolue (se suffit a elle-meme)
+    |-- git.txt         commit, branche, fichiers non commites
+    |-- lineage.json    empreintes de uv.lock (environnement) et des splits figes (donnees)
+    |-- run.log         avancement (handler fichier de Hydra + LogProgress) ; pas pour eval
+    |-- metrics.csv     metriques par pas et par epoch (CSVLogger de Lightning) ; pas pour eval
+    |-- checkpoints/    last.ckpt : reprise d'un run interrompu
+    |-- backbone.pt     state_dict du backbone (save_backbone) ; neck.pt et head.pt pour `lo train`
+    |-- README.md       fiche du dossier (hub.write_card), pour backbone/ et downstream/<...>
+    |-- results.json    empreintes, parametres, resultats finaux ; ecrit en dernier
+    `-- mlflow.db       suivi MLflow du run : config, courbes, resultats, tags (mlflow_logger)
 
 `backbone.pt` et `results.json` forment le format relu par `from_run` : le modifier
-casse le rechargement des runs existants. Un dossier de run n'est écrit que par son run,
-puis plus jamais modifié : c'est ce qui permet de publier sans rien écraser (hub.plan).
+casse le rechargement des runs existants. Un dossier de run n'est ecrit que par son run,
+puis plus jamais modifie : c'est ce qui permet de publier sans rien ecraser (hub.plan).
 
 MLflow : une base SQLite par dossier de run (`mlflow_logger`, `mlflow_finish`). Un seul
-programme y écrit, donc aucun conflit de verrou, même sur le disque réseau du DCE où
-tournent des jobs simultanés. La base est publiée sur le Hub avec le run, et `lo mlflow sync`
-(commande manuelle) fusionne ensuite les runs terminés (Hub et results/ locaux) dans la base
-d'équipe data/mlflow.db. Le dossier de run reste la référence (poids,
+programme y ecrit, donc aucun conflit de verrou, meme sur le disque reseau du DCE ou
+tournent des jobs simultanes. La base est publiee sur le Hub avec le run, et `lo mlflow sync`
+(commande manuelle) fusionne ensuite les runs termines (Hub et results/ locaux) dans la base
+d'equipe data/mlflow.db. Le dossier de run reste la reference (poids,
 checkpoints) : MLflow l'indexe, il ne le remplace pas.
 """
 
@@ -53,12 +53,12 @@ from latentopt.models.contract import count_params, weights_hash
 log = logging.getLogger(__name__)
 
 DEVICES = ("auto", "cpu", "cuda")  # cluster.device
-ACCELERATORS = {"cpu": "cpu", "cuda": "gpu"}  # device résolu -> accelerator de Lightning
+ACCELERATORS = {"cpu": "cpu", "cuda": "gpu"}  # device resolu -> accelerator de Lightning
 PRECISIONS = {"fp32": "32-true", "fp16": "16-mixed", "bf16": "bf16-mixed"}
 
 
 def _git(*args: str) -> str | None:
-    """Sortie d'une commande git dans le dépôt ; None si git est absent ou échoue."""
+    """Sortie d'une commande git dans le depot ; None si git est absent ou echoue."""
     try:
         out = subprocess.run(["git", *args], cwd=PROJECT_ROOT, capture_output=True, text=True)
     except FileNotFoundError:
@@ -67,7 +67,7 @@ def _git(*args: str) -> str | None:
 
 
 def git_info() -> dict[str, Any]:
-    # git absent ou hors dépôt : les champs valent None, le run ne plante pas
+    # git absent ou hors depot : les champs valent None, le run ne plante pas
     changed = _git("status", "--porcelain")
     return {
         "commit": _git("rev-parse", "HEAD"),
@@ -87,38 +87,38 @@ def unpushed_commit() -> str | None:
 
 
 def confirm_pushed(ask: Callable[[str], str] = input) -> bool:
-    """Avant un run (`lo pretrain|train|eval`) : le commit doit être sur GitHub.
+    """Avant un run (`lo pretrain|train|eval`) : le commit doit etre sur GitHub.
 
-    git.txt et MLflow enregistrent le commit du run ; s'il n'est pas poussé, personne d'autre
+    git.txt et MLflow enregistrent le commit du run ; s'il n'est pas pousse, personne d'autre
     ne peut retrouver le code du run. En terminal, demande s'il faut continuer (y/n, non par
-    défaut) ; sans terminal (job Slurm, CI, tests), avertit seulement.
+    defaut) ; sans terminal (job Slurm, CI, tests), avertit seulement.
     """
     commit = unpushed_commit()
     if commit is None:
         return True
     warning = (
-        f"Le commit {commit[:7]} n'est pas poussé sur GitHub : le run l'enregistrera, mais "
-        "personne d'autre ne pourra retrouver son code. Sans `git push`, la traçabilité du run "
-        "est cassée."
+        f"Le commit {commit[:7]} n'est pas pousse sur GitHub : le run l'enregistrera, mais "
+        "personne d'autre ne pourra retrouver son code. Sans `git push`, la tracabilite du run "
+        "est cassee."
     )
     if not sys.stdin.isatty():
         print(f"ATTENTION : {warning}", file=sys.stderr)
         return True
-    answer = ask(f"{warning}\nPousser d'abord (git push). Continuer quand même ? [y/n] ")
+    answer = ask(f"{warning}\nPousser d'abord (git push). Continuer quand meme ? [y/n] ")
     return answer.strip().lower() in ("y", "yes")
 
 
 def _sha256_text(path: Path) -> str:
-    """Empreinte d'un fichier texte, fins de ligne normalisées : même valeur sous Windows
-    (CRLF après écriture locale) et sous Linux."""
+    """Empreinte d'un fichier texte, fins de ligne normalisees : meme valeur sous Windows
+    (CRLF apres ecriture locale) et sous Linux."""
     return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def lineage() -> dict[str, Any]:
-    """Environnement et données du run : empreinte de uv.lock et de chaque split figé.
+    """Environnement et donnees du run : empreinte de uv.lock et de chaque split fige.
 
-    Le commit les fixe déjà quand l'arbre est propre ; les empreintes restent justes avec un
-    arbre modifié et permettent de comparer deux runs sans remonter l'historique git.
+    Le commit les fixe deja quand l'arbre est propre ; les empreintes restent justes avec un
+    arbre modifie et permettent de comparer deux runs sans remonter l'historique git.
     """
     lock = PROJECT_ROOT / "uv.lock"
     return {
@@ -137,13 +137,13 @@ def check_launch(cfg: DictConfig, git: dict[str, Any]) -> None:
     long_run = cfg.cluster.name == "dce" and cfg.experiment_name != "smoke"
     if long_run and git["dirty"] and not cfg.allow_dirty:
         raise RuntimeError(
-            "job long avec un arbre git non commité (CONTRIBUTING.md) : commiter, ou "
+            "job long avec un arbre git non commite (CONTRIBUTING.md) : commiter, ou "
             "allow_dirty=true en connaissance de cause. Fichiers : " + ", ".join(git["changed"][:5])
         )
 
 
 def lightning_settings(device: str, precision: str) -> dict[str, str]:
-    """device (cluster) et precision (méthode) de la config -> arguments du Trainer."""
+    """device (cluster) et precision (methode) de la config -> arguments du Trainer."""
     accelerator = ACCELERATORS[resolve_device(device)]
     if accelerator == "cpu" and precision == "fp16":
         raise ValueError("fp16 n'est pas disponible sur CPU : precision=fp32 (ou bf16)")
@@ -154,7 +154,7 @@ def resolve_device(device: str) -> str:
     """cluster.device (auto, cpu, cuda) -> cpu ou cuda, le GPU seulement s'il est utilisable.
 
     auto : cuda si cuda_problem() ne trouve rien, sinon cpu (avertissement si un GPU NVIDIA est
-    présent mais inutilisable). cuda : erreur si le GPU est inutilisable, plutôt qu'un job long
+    present mais inutilisable). cuda : erreur si le GPU est inutilisable, plutot qu'un job long
     sur CPU.
     """
     if device not in DEVICES:
@@ -167,7 +167,7 @@ def resolve_device(device: str) -> str:
     if device == "cuda":
         raise RuntimeError(f"device=cuda, mais le GPU est inutilisable : {problem}")
     if shutil.which("nvidia-smi"):
-        log.warning("GPU NVIDIA présent mais inutilisable, run sur CPU : %s", problem)
+        log.warning("GPU NVIDIA present mais inutilisable, run sur CPU : %s", problem)
     return "cpu"
 
 
@@ -182,7 +182,7 @@ def cuda_problem() -> str | None:
             f"torch {torch.__version__} ne voit aucun GPU (pas de GPU NVIDIA, ou pilote trop "
             f"ancien pour CUDA {torch.version.cuda})"
         )
-    try:  # une vraie opération : une carte trop ancienne passe is_available() puis échoue ici
+    try:  # une vraie operation : une carte trop ancienne passe is_available() puis echoue ici
         (torch.ones(1, device="cuda") + 1).item()
     except RuntimeError as e:
         return f"{torch.cuda.get_device_name(0)} : {e}"
@@ -190,8 +190,8 @@ def cuda_problem() -> str | None:
 
 
 def prepare(cfg: DictConfig, run_dir: Path) -> dict[str, Any]:
-    """Vérifie le lancement, écrit config.yaml (résolue), git.txt et lineage.json.
-    Renvoie l'état git, avec la lignée sous la clé `lineage`."""
+    """Verifie le lancement, ecrit config.yaml (resolue), git.txt et lineage.json.
+    Renvoie l'etat git, avec la lignee sous la cle `lineage`."""
     git = git_info()
     check_launch(cfg, git)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -207,8 +207,8 @@ def prepare(cfg: DictConfig, run_dir: Path) -> dict[str, Any]:
 
 
 def save_backbone(run_dir: Path, backbone: nn.Module, **results: Any) -> dict[str, Any]:
-    """backbone.pt, README.md puis results.json (qui marque le run terminé), avec
-    l'empreinte des poids enregistrés."""
+    """backbone.pt, README.md puis results.json (qui marque le run termine), avec
+    l'empreinte des poids enregistres."""
     import torch
 
     backbone = backbone.cpu().eval()
@@ -220,18 +220,18 @@ def save_backbone(run_dir: Path, backbone: nn.Module, **results: Any) -> dict[st
     }
     hub.write_card(run_dir, payload)
     (run_dir / "results.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    log.info("backbone.pt sauvegardé, sha256 %s", payload["backbone_sha256"][:12])
+    log.info("backbone.pt sauvegarde, sha256 %s", payload["backbone_sha256"][:12])
     return payload
 
 
 MLFLOW_DB = "mlflow.db"
-# fichiers légers du run, joints au run dans la base centrale par `lo mlflow sync`
+# fichiers legers du run, joints au run dans la base centrale par `lo mlflow sync`
 MLFLOW_ARTIFACTS = ("config.yaml", "git.txt", "lineage.json", "results.json", "run.log")
 
 
 def mlflow_uri(cfg: DictConfig, run_dir: Path) -> str | None:
-    """MLFLOW_TRACKING_URI (serveur) s'il est défini, sinon la base du run ; None : désactivé."""
-    os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")  # message destiné aux agents IA
+    """MLFLOW_TRACKING_URI (serveur) s'il est defini, sinon la base du run ; None : desactive."""
+    os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")  # message destine aux agents IA
     if os.environ.get("MLFLOW_TRACKING_URI"):
         return os.environ["MLFLOW_TRACKING_URI"]
     if not cfg.cluster.get("mlflow", False):
@@ -241,7 +241,7 @@ def mlflow_uri(cfg: DictConfig, run_dir: Path) -> str | None:
 
 def mlflow_run_name(cfg: DictConfig, run_dir: Path) -> str:
     """Chemin du dossier sous results/ : `<run>/backbone` (pretrain),
-    `<run>/downstream/<tâche>-<neck>-<tête>-<date>` (train), le même suivi de
+    `<run>/downstream/<tache>-<neck>-<tete>-<date>` (train), le meme suivi de
     `/eval/<split>-<date>` (eval). Hors de results_root : son nom."""
     try:
         root = Path(cfg.cluster.results_root).resolve()
@@ -251,10 +251,10 @@ def mlflow_run_name(cfg: DictConfig, run_dir: Path) -> str:
 
 
 def name_tags(run_dir: Path) -> dict[str, str]:
-    """Parties des noms (docs/HUB.md) en tags filtrables, et dépôt Hugging Face de destination :
-    celles du backbone, plus, pour un entraînement downstream/<…> ou l'une de ses
-    évaluations, la tâche, le neck, la tête et le nom du dossier d'entraînement (`downstream`,
-    commun à l'entraînement et à ses évaluations)."""
+    """Parties des noms (docs/HUB.md) en tags filtrables, et depot Hugging Face de destination :
+    celles du backbone, plus, pour un entrainement downstream/<...> ou l'une de ses
+    evaluations, la tache, le neck, la tete et le nom du dossier d'entrainement (`downstream`,
+    commun a l'entrainement et a ses evaluations)."""
     try:
         root = hub.run_root(run_dir)
     except ValueError:  # dossier hors convention
@@ -271,7 +271,7 @@ def name_tags(run_dir: Path) -> dict[str, str]:
 
 
 def env_tags() -> dict[str, str]:
-    """Machine et versions : expliquent un écart de vitesse ou de résultat entre deux runs."""
+    """Machine et versions : expliquent un ecart de vitesse ou de resultat entre deux runs."""
     import torch
 
     tags = {
@@ -288,9 +288,9 @@ def env_tags() -> dict[str, str]:
 def mlflow_logger(
     cfg: DictConfig, stage: str, run_dir: Path, git: dict[str, Any]
 ) -> MLFlowLogger | None:
-    """Run MLflow du run : expérience `<stage>/<experiment_name>`, nom = chemin du dossier de
-    run, paramètres = config résolue complète (aplatie), tags = parties du nom, dépôt Hugging
-    Face, auteur, état git, lignée, machine et versions. None si le suivi est désactivé.
+    """Run MLflow du run : experience `<stage>/<experiment_name>`, nom = chemin du dossier de
+    run, parametres = config resolue complete (aplatie), tags = parties du nom, depot Hugging
+    Face, auteur, etat git, lignee, machine et versions. None si le suivi est desactive.
 
     N'y entrent jamais : les poids (dossier de run, Hub) ni les variables d'environnement."""
     uri = mlflow_uri(cfg, run_dir)
@@ -321,16 +321,16 @@ def mlflow_logger(
         run_name=mlflow_run_name(cfg, run_dir),
         tracking_uri=uri,
         tags=tags,
-        # base du run : aucun artefact n'y est écrit, ses fichiers sont déjà à côté ;
+        # base du run : aucun artefact n'y est ecrit, ses fichiers sont deja a cote ;
         # serveur (MLFLOW_TRACKING_URI) : son propre emplacement
         artifact_location=(run_dir.resolve() / "mlartifacts").as_uri()
         if uri.startswith("sqlite:")
         else None,
     )
-    # La création du run (premier accès à logger.experiment) appelle mlflow.set_tracking_uri,
-    # qui écrit MLFLOW_TRACKING_URI dans l'environnement : sans restauration, le run suivant
-    # du même processus (balayage -m local) écrirait dans la base de celui-ci, et les
-    # sous-processus en hériteraient.
+    # La creation du run (premier acces a logger.experiment) appelle mlflow.set_tracking_uri,
+    # qui ecrit MLFLOW_TRACKING_URI dans l'environnement : sans restauration, le run suivant
+    # du meme processus (balayage -m local) ecrirait dans la base de celui-ci, et les
+    # sous-processus en heriteraient.
     before = os.environ.get("MLFLOW_TRACKING_URI")
     try:
         logger.log_hyperparams(OmegaConf.to_container(cfg, resolve=True))
@@ -351,7 +351,7 @@ def _flatten(d: dict[str, Any], prefix: str = "") -> dict[str, Any]:
 
 
 def mlflow_finish(logger: MLFlowLogger | None, results: dict[str, Any]) -> None:
-    """Résultats finaux : nombres -> métriques `results/...`, textes et booléens -> tags."""
+    """Resultats finaux : nombres -> metriques `results/...`, textes et booleens -> tags."""
     if logger is None:
         return
     client, run_id = logger.experiment, logger.run_id
@@ -367,7 +367,7 @@ def mlflow_finish(logger: MLFlowLogger | None, results: dict[str, Any]) -> None:
 
 
 class LogProgress(L.Callback):
-    """Une ligne par epoch dans run.log : métriques d'epoch, lr, temps écoulé."""
+    """Une ligne par epoch dans run.log : metriques d'epoch, lr, temps ecoule."""
 
     def on_train_start(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
         self.t0 = time.time()

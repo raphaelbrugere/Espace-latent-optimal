@@ -1,12 +1,12 @@
 [project]
 name = "latentopt"
 version = "0.1.0"
-description = "Backbone de vision pré-entraîné en auto-supervisé (LeJEPA) et têtes supervisées, pour l'embarqué"
+description = "Backbone de vision pre-entraine en auto-supervise (LeJEPA) et tetes supervisees, pour l'embarque"
 readme = "README.md"
 authors = [
     { name = "Flavien Liardet", email = "flavien.liardet@student-cs.fr" },
     { name = "Ethan Bitton", email = "ethan.bitton@student-cs.fr" },
-    { name = "Raphaël Brugère", email = "raphael.brugere@student-cs.fr" },
+    { name = "Raphael Brugere", email = "raphael.brugere@student-cs.fr" },
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
-# point d'entrée unique (src/latentopt/cli/__init__.py) ; latentopt = nom long de lo
+# point d'entree unique (src/latentopt/cli/__init__.py) ; latentopt = nom long de lo
 lo = "latentopt.cli:main"
 latentopt = "latentopt.cli:main"
 
@@ -32,15 +32,15 @@ requires = ["uv_build>=0.11.27,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.uv]
-# Versions figées pour tous (local, CI, DCE) : uv refuse de tourner dans une autre version.
-# Mise à jour : changer ici, dans .python-version, puis `uv self update <version>` partout.
+# Versions figees pour tous (local, CI, DCE) : uv refuse de tourner dans une autre version.
+# Mise a jour : changer ici, dans .python-version, puis `uv self update <version>` partout.
 required-version = "==0.13.7"
-# Python téléchargé par uv (version exacte de .python-version), jamais celui du système :
-# le DCE fournit 3.12.3, Windows celui installé à la main.
+# Python telecharge par uv (version exacte de .python-version), jamais celui du systeme :
+# le DCE fournit 3.12.3, Windows celui installe a la main.
 python-preference = "only-managed"
 
 # torch depuis l'index PyTorch partout : sur PyPI, la wheel Windows est CPU uniquement.
-# cu132 = CUDA de la wheel PyPI Linux de torch 2.15 (driver DCE 610 → CUDA ≤ 13.3).
+# cu132 = CUDA de la wheel PyPI Linux de torch 2.15 (driver DCE 610 -> CUDA <= 13.3).
 [[tool.uv.index]]
 name = "pytorch-cu132"
 url = "https://download.pytorch.org/whl/cu132"
@@ -73,9 +73,9 @@ markers = [
     "slow: smoke test de bout en bout par les commandes lo (pytest -m \"not slow\" pour l'exclure)",
 ]
 filterwarnings = [
-    # bruit de Lightning en test (CPU, num_workers=0, petits batches) : sans effet sur le résultat
+    # bruit de Lightning en test (CPU, num_workers=0, petits batches) : sans effet sur le resultat
     "ignore:.*does not have many workers.*",
     'ignore:.*isinstance\(treespec, LeafSpec\).*',
-    # interne à MLflow (SQLAlchemy), sans effet sur nos runs
+    # interne a MLflow (SQLAlchemy), sans effet sur nos runs
     "ignore:.*noload.*loader strategy is deprecated.*",
 ]
