@@ -2,10 +2,10 @@
 #
 #   lo train backbone=from_run backbone.run=<run> task=pets_seg              # neck + tête de la tâche
 #   lo train backbone=from_run backbone.run=<run> task=pets_seg neck=fpn head=conv_seg neck.channels=128
-#   lo train backbone=from_run backbone.run=<run> task=pets_det head=soft_argmax \r
+#   lo train backbone=from_run backbone.run=<run> task=pets_det head=soft_argmax \
 #       neck_from=pets_seg-fpn-conv_seg-20261117_090000                      # neck gelé, tête seule
 #   lo train backbone=vit_s8_dino backbone_data=imagenet1k backbone_method=dino task=imagenette_cls
-#   lo train backbone=from_run backbone.run=<run> \r
+#   lo train backbone=from_run backbone.run=<run> \
 #       task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det -m  # les 5 tâches
 # (-m après tous les overrides, ou avant tous : pas au milieu)
 #
