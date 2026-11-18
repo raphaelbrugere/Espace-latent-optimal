@@ -32,6 +32,10 @@ Interface : MLFLOW_DISABLE_AGENT_HINT=1 uv run mlflow ui --backend-store-uri sql
 import argparse
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # import réel dans fetch_hub : seulement si le Hub est interrogé
+    from huggingface_hub import HfApi
 
 os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")  # avant l'import de mlflow
 
@@ -50,7 +54,7 @@ def sqlite_uri(path: Path) -> str:
     return "sqlite:///" + path.resolve().as_posix()
 
 
-def fetch_hub(dest: Path, org: str = hub.ORG, api=None) -> list[str]:
+def fetch_hub(dest: Path, org: str = hub.ORG, api: "HfApi | None" = None) -> list[str]:
     """Telecharge la `mlflow.db` et les fichiers legers de chaque depot de `org` dans
     dest/<depot>/ (a jour : rien n'est retelecharge) ; renvoie les depots parcourus."""
     from huggingface_hub import HfApi, snapshot_download

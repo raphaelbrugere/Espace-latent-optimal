@@ -5,6 +5,21 @@
 - Merge commit (titre et description de la PR) : le tracé des branches reste dans l'historique ;
   la branche est supprimée sur GitHub après le merge.
 
+## Écrire du code
+Les noms et les types disent *quoi*, la docstring dit le *contrat*, le commentaire dit *pourquoi
+c'est fait comme ça*, et l'outillage vérifie que tout reste vrai.
+
+| Pratique | Concrètement | Vérifié par |
+|---|---|---|
+| Types sur toute fonction publique | Paramètres et retour annotés (`def build(split: str) -> Subset`) ; inutile sur les variables locales | ruff `ANN001`, `ANN201` |
+| Une docstring par module et par classe | À quoi sert le fichier, quand l'utiliser, ses pièges | ruff `D100`, `D101` |
+| Docstring de fonction seulement si nom et types ne suffisent pas | Le contrat : format des tenseurs (forme, plage, convention), effets de bord (disque, réseau), invariants, erreurs levées. Une ligne suffit souvent ; pas de `Args:` / `Returns:` qui répètent les types | relecture |
+| Commentaires rares | Une décision ou un piège (`# graine unique par (split, index)`), jamais une paraphrase du code ; pas de code commenté (git s'en souvient) ; un commentaire faux est corrigé dans le même commit | relecture |
+| Pas de `TODO` orphelin | Ouvrir une issue `task` plutôt | relecture |
+| Une seule langue : le français | Code, docstrings, commentaires, doc et messages de commit | relecture |
+| Format et lint | Formatage, imports triés, erreurs probables | ruff (pre-commit, CI `Lint`) |
+| Chaque chose à sa place | Architecture d'ensemble dans `docs/` ; pourquoi d'un changement dans le message de commit ; exemples d'usage dans les tests (documentation exécutable, qui ne peut pas devenir fausse sans que la CI le voie) | — |
+
 ## Avant de pousser
 La CI refait ces vérifications, mais un échec y coûte un aller-retour : mieux vaut le voir en local.
 

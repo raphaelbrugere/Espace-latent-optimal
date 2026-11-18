@@ -62,10 +62,12 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "D100", "D101"]  # docstring de module et de classe
+# D100, D101 : docstring de module et de classe ;
+# ANN001, ANN201 : paramètres et retour annotés sur les fonctions publiques
+select = ["E", "F", "W", "I", "UP", "B", "D100", "D101", "ANN001", "ANN201"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["D100", "D101"]
+"tests/**" = ["D100", "D101", "ANN001", "ANN201"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
