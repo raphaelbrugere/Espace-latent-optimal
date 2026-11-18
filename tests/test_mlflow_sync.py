@@ -97,9 +97,9 @@ def test_running_runs_are_skipped_unless_asked(results):
     assert mlflow_sync.sync([results], db, include_running=True)["present"] == 1
 
 
-def test_sync_merges_several_results_dirs_into_one_experiment(tmp_path):
-    """Les runs de deux membres de l'equipe, meme experience : une seule experience centrale."""
-    mine, theirs = tmp_path / "moi" / "results", tmp_path / "collegue" / "results"
+def test_sync_merges_several_sources_into_one_experiment(tmp_path):
+    """results/ local et copie du Hub, meme experience : une seule experience centrale."""
+    mine, theirs = tmp_path / "results", tmp_path / "data" / "mlflow_hub"
     make_run(mine, "pretrain", "lejepa", "2026-01-01")
     make_run(theirs, "pretrain", "lejepa", "2026-01-02")
     make_run(theirs, "train", "lejepa", "pets_seg/2026-01-03")
@@ -119,23 +119,27 @@ def test_central_database_is_never_treated_as_a_source(results):
     assert mlflow_sync.sync([results], db)["imported"] == 0
 
 
-def test_default_team_database_is_in_data_root(tmp_path, monkeypatch, capsys):
+def test_default_sources_are_its_own_results_and_team_database_is_in_data_root(
+    tmp_path, monkeypatch, capsys
+):
+    """Sans option : results/ de la machine (OUTPUT_ROOT) -> <DATA_ROOT>/mlflow.db."""
     monkeypatch.setenv("DATA_ROOT", str(tmp_path / "data"))
-    mine, theirs = tmp_path / "moi" / "results", tmp_path / "collegue" / "results"
+    mine = tmp_path / "results"
+    monkeypatch.setenv("OUTPUT_ROOT", str(mine))
     make_run(mine, "pretrain", "exp", "a")
-    make_run(theirs, "pretrain", "exp", "b")
+    make_run(tmp_path / "ailleurs", "pretrain", "exp", "b")  # jamais lu
     repo_db = PROJECT_ROOT / "data" / "mlflow.db"
     existed = repo_db.exists()
-    mlflow_sync.main(["--results", str(mine), str(theirs), "--no-hub"])
-    assert (tmp_path / "data" / "mlflow.db").exists()
-    assert not (mine / "mlflow.db").exists() and not (theirs / "mlflow.db").exists()
+    mlflow_sync.main(["--no-hub"])
+    assert (tmp_path / "data" / "mlflow.db").exists() and not (mine / "mlflow.db").exists()
     assert repo_db.exists() == existed  # la base du depot n'est jamais touchee
-    assert "2 importes" in capsys.readouterr().out
+    assert "1 importes" in capsys.readouterr().out
 
 
-def test_main_prints_summary(results, capsys):
+def test_main_prints_summary(results, capsys, monkeypatch):
+    monkeypatch.setenv("OUTPUT_ROOT", str(results))
     make_run(results, "eval", "smoke", "val/2026-01-01")
-    mlflow_sync.main(["--results", str(results), "--db", str(results / "central.db"), "--no-hub"])
+    mlflow_sync.main(["--db", str(results / "central.db"), "--no-hub"])
     assert "1 importes, 0 deja presents, 0 en cours ignores" in capsys.readouterr().out
 
 

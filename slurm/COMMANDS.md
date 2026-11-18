@@ -139,6 +139,8 @@ ls results/.submitit/<job_id>/                      # sorties brutes de Slurm (s
 
 ## 9. Comparer les runs (MLflow)
 
+Mode d'emploi court (usage local, filtres, comparaisons) : [docs/MLFLOW.md](../docs/MLFLOW.md).
+
 Chaque run (`pretrain`, `train`, et chaque évaluation de `eval`) a sa propre base MLflow,
 `<dossier du run>/mlflow.db`.
 Un seul programme écrit dans chaque base, donc aucun conflit entre jobs simultanés sur le disque
@@ -166,12 +168,12 @@ Deux sources :
 - **le Hub** : chaque dépôt publié par `lo hub push` contient les `mlflow.db` de son backbone, de ses
   entraînements et de leurs évaluations. Seules
   les bases et les fichiers légers sont téléchargés (dans `data/mlflow_hub/`), jamais les poids ;
-- **les `results/` locaux** (`--results`) : les runs et les évaluations pas encore publiés.
+- **son propre `results/`** : ses runs et évaluations pas encore publiés. Les runs des autres arrivent
+  par le Hub, une fois publiés : le sync ne lit jamais le home d'un autre.
 
 ```bash
 hf auth login                            # une fois : les dépôts sont privés
 uv run lo mlflow sync                    # Hub + results/ -> data/mlflow.db
-uv run lo mlflow sync --results results <home d'un collègue>/Espace-latent-optimal/results
 uv run lo mlflow sync --no-hub           # results/ locaux seulement (hors ligne)
 uv run lo mlflow sync --include-running  # aussi les runs RUNNING (job tué par Slurm)
 ```
@@ -181,8 +183,6 @@ uv run lo mlflow sync --include-running  # aussi les runs RUNNING (job tué par 
   d'origine, qu'il vienne du Hub ou d'un dossier local ; rien n'est dupliqué.
 - **Les runs en cours sont ignorés** : ils seront importés à la synchronisation suivante, une fois
   terminés. Un job tué par Slurm (limite de temps) reste `RUNNING` : `--include-running`.
-- **Runs des collègues non publiés** : passer leurs `results/` à `--results`. Il suffit de pouvoir
-  les lire (voir docs/CLUSTER.md, « Stockage »).
 
 Interface, sur la passerelle du DCE (là où sont les runs : les fichiers y sont référencés par
 chemin absolu) :

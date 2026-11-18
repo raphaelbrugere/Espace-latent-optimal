@@ -10,6 +10,7 @@ automatique a chaque PR. Donnees synthetiques, CPU, resultats dans un dossier te
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -193,10 +194,12 @@ def test_mlflow_sync_gathers_every_stage(pipeline):
     import mlflow
 
     results = pipeline["root"] / "results"
-    sync = [sys.executable, "-m", "latentopt.cli", "mlflow", "sync", "--results", str(results),
+    sync = [sys.executable, "-m", "latentopt.cli", "mlflow", "sync",
             "--db", str(results / "mlflow.db"), "--no-hub"]  # fmt: skip
+    env = {**os.environ, "OUTPUT_ROOT": str(results)}  # results/ de la machine
     for expected in ("9 importes, 0 deja presents", "0 importes, 9 deja presents"):
-        proc = subprocess.run(sync, cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=300)
+        proc = subprocess.run(sync, cwd=PROJECT_ROOT, capture_output=True, text=True,
+                              timeout=300, env=env)  # fmt: skip
         assert proc.returncode == 0, proc.stderr
         assert expected in proc.stdout
 

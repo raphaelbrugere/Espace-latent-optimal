@@ -102,7 +102,8 @@ Espace-latent-optimal/
 │   ├── CONFIGS.md              # les groupes de configs Hydra et leurs clés
 │   ├── DATASETS.md             # source, licence, checksum, taille, split de chaque dataset
 │   ├── CLUSTER.md              # mode d'emploi du DCE : quotas, partitions, Internet
-│   └── HUB.md                  # noms des runs, organisation Hugging Face, publication
+│   ├── HUB.md                  # noms des runs, organisation Hugging Face, publication
+│   └── MLFLOW.md               # comparer les runs : base d'équipe, interface, filtres
 │
 ├── .vscode/                    # réglages VS Code partagés (voir plus bas)
 │
@@ -145,8 +146,9 @@ uv run lo eval downstream='[<run>/downstream/imagenette_cls-embed_norm-linear-<d
 uv run lo hub push <run>
 uv run lo hub pull <run>          # le récupérer ailleurs (ou donner simplement son nom)
 
-# comparer tous les runs (Hub + results/) dans la base d'équipe data/mlflow.db
+# comparer tous les runs (Hub + results/) dans la base d'équipe data/mlflow.db (docs/MLFLOW.md)
 uv run lo mlflow sync
+uv run mlflow ui --backend-store-uri sqlite:///data/mlflow.db   # http://localhost:5000
 ```
 
 Toutes les commandes, avec leurs variantes et pièges : [slurm/COMMANDS.md](slurm/COMMANDS.md).

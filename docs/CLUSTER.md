@@ -150,11 +150,7 @@ du -ahd1 ~ | sort -hr | head    # ce qui prend de la place
 uv cache clean                  # le cache uv (~/.cache/uv) peut être vidé sans risque
 ```
 
-On ne peut rien écrire dans `/mounts/datasets`. Pour éviter que chaque membre de l'équipe télécharge sa propre copie des données, deux options :
-- **Ouvrir son dossier `data` au groupe Unix commun.** Le propriétaire lance `chmod g+x ~ ~/Espace-latent-optimal` et `chmod -R g+rX ~/Espace-latent-optimal/data`. Les autres mettent `DATA_ROOT` sur ce chemin dans leur `~/.bashrc`. À vérifier : `id` doit afficher le même groupe pour tous.
-- **Demander au support un dossier partagé en écriture.** C'est la solution si les données grossissent : features en cache, checkpoints, ImageNet-100.
-
-Base MLflow d'équipe (voir [slurm/COMMANDS.md](../slurm/COMMANDS.md), section 9) : `lo mlflow sync` n'a besoin que de **lire** les `results/` des autres. Chacun lance une fois `chmod g+x ~ ~/Espace-latent-optimal` et `chmod -R g+rX ~/Espace-latent-optimal/results`, et ajoute `umask 027` à son `~/.bashrc` pour que les runs suivants soient eux aussi lisibles par le groupe.
+On ne peut rien écrire dans `/mounts/datasets`. Chacun garde ses données dans son propre home ; on ne lit jamais le home d'un autre.
 
 ## Partitions
 

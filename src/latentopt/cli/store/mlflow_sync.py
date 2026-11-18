@@ -2,7 +2,6 @@
 d'equipe `data/mlflow.db`, pour comparer tous nos modeles dans une seule interface.
 
     lo mlflow sync                                  # Hub + results/ -> data/mlflow.db
-    lo mlflow sync --results results <home collegue>/Espace-latent-optimal/results
     lo mlflow sync --no-hub                         # results/ locaux seulement (hors ligne)
     lo mlflow sync --include-running               # aussi les runs non termines
 
@@ -10,8 +9,8 @@ Deux sources :
 - le Hub Hugging Face : chaque depot de l'organisation contient une `mlflow.db` par run
   (backbone, entrainements, evaluations ; `lo hub push`). Seules les bases et les fichiers
   legers sont telecharges, dans data/mlflow_hub/<depot>/, jamais les poids ;
-- les dossiers `--results` (defaut : results/) : les runs pas encore publies. Ils ne sont
-  que lus (droit de lecture de groupe suffisant pour ceux d'un collegue).
+- son propre results/ (OUTPUT_ROOT, sinon <projet>/results) : ses runs pas encore publies.
+  Les runs des autres arrivent par le Hub, jamais en lisant leur home.
 
 Idempotent : un run est reconnu par son identifiant MLflow d'origine (tag `source_run_id`),
 le meme qu'il vienne du Hub ou d'un dossier local. Relancer n'importe que les nouveaux runs.
@@ -43,7 +42,7 @@ import mlflow  # noqa: E402
 from mlflow.entities import Metric, Param, ViewType  # noqa: E402
 
 from latentopt import hub  # noqa: E402
-from latentopt.data.paths import PROJECT_ROOT, data_root  # noqa: E402
+from latentopt.data.paths import data_root  # noqa: E402
 from latentopt.run import MLFLOW_ARTIFACTS, MLFLOW_DB  # noqa: E402
 
 TERMINATED = {"FINISHED", "FAILED", "KILLED"}
@@ -162,15 +161,13 @@ def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    p.add_argument("--results", type=Path, nargs="+", default=[PROJECT_ROOT / "results"],
-                   help="dossiers de resultats locaux a parcourir (defaut : results/)")  # fmt: skip
     p.add_argument("--no-hub", action="store_true", help="ne lit pas les depots du Hub")
     p.add_argument("--db", type=Path, default=None,
                    help="base d'equipe (defaut : <DATA_ROOT>/mlflow.db)")  # fmt: skip
     p.add_argument("--include-running", action="store_true")
     args = p.parse_args(argv)
     args.db = args.db or data_root() / MLFLOW_DB
-    dirs = list(args.results)
+    dirs = [hub.results_root()]
     if not args.no_hub:
         cache = data_root() / "mlflow_hub"
         repos = fetch_hub(cache)
