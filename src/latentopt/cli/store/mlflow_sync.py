@@ -34,7 +34,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:  # import réel dans fetch_hub : seulement si le Hub est interrogé
+if TYPE_CHECKING:  # import reel dans fetch_hub : seulement si le Hub est interroge
     from huggingface_hub import HfApi
 
 os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")  # avant l'import de mlflow

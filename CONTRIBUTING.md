@@ -17,6 +17,7 @@ c'est fait comme ça*, et l'outillage vérifie que tout reste vrai.
 | Commentaires rares | Une décision ou un piège (`# graine unique par (split, index)`), jamais une paraphrase du code ; pas de code commenté (git s'en souvient) ; un commentaire faux est corrigé dans le même commit | relecture |
 | Pas de `TODO` orphelin | Ouvrir une issue `task` plutôt | relecture |
 | Une seule langue : le français | Code, docstrings, commentaires, doc et messages de commit | relecture |
+| ASCII seulement dans le code | `.py`, configs YAML, `pyproject.toml` : ni accents ni symboles (`->`, `<=`, pas `→`, `≤`). Sous Windows, une sortie redirigée (fichier, pipe, job) est encodée en cp1252, et un `print` non ASCII fait planter la commande. La doc (`.md`) et les templates GitHub gardent leurs accents | relecture |
 | Format et lint | Formatage, imports triés, erreurs probables | ruff (pre-commit, CI `Lint`) |
 | Chaque chose à sa place | Architecture d'ensemble dans `docs/` ; pourquoi d'un changement dans le message de commit ; exemples d'usage dans les tests (documentation exécutable, qui ne peut pas devenir fausse sans que la CI le voie) | — |
 
