@@ -15,7 +15,6 @@ from latentopt.data.datasets.base import Subset, require, reset
 from latentopt.data.paths import datasets_root
 
 NAME = "imagenette"
-NUM_CLASSES = 10
 SIZE = "160px"
 FOLDER = "imagenette2-160"
 # CRITIQUE : nom court du dataset dans les noms de runs et de depots Hub. NE JAMAIS LE

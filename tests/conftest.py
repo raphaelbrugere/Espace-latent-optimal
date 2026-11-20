@@ -14,8 +14,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from latentopt.data.paths import PROJECT_ROOT
-
 TINY_VIT = {
     "_target_": "latentopt.models.backbones.archs.vit.TimmViT",
     "arch": "vit_tiny_patch16_224",
@@ -79,11 +77,6 @@ def pyramid():
 def tiny_vit_cfg() -> dict:
     """Config Hydra de `tiny_vit` (format de backbone de config.yaml d'un run)."""
     return dict(TINY_VIT, blocks=list(TINY_VIT["blocks"]))
-
-
-@pytest.fixture
-def configs_dir() -> str:
-    return str(PROJECT_ROOT / "configs")
 
 
 # couples neck + tete de la baseline, par famille de tache (evaluation/tasks.py)

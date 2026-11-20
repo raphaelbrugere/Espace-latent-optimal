@@ -19,7 +19,6 @@ from latentopt.data.datasets.base import Subset, raw, require, reset
 from latentopt.data.paths import datasets_root
 
 NAME = "galaxy10"
-NUM_CLASSES = 10
 REPO = "matthieulel/galaxy10_decals"
 # CRITIQUE : commit HF des donnees telechargees. NE PAS LE MODIFIER a la legere : les splits
 # figes designent les images par numero de ligne, valable pour cette revision seulement. Le

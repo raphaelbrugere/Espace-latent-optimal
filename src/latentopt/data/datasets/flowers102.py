@@ -11,7 +11,6 @@ from latentopt.data.datasets.base import Subset, require, reset
 from latentopt.data.paths import datasets_root
 
 NAME = "flowers102"
-NUM_CLASSES = 102
 FOLDER = "flowers-102"
 # CRITIQUE : nom court du dataset dans les noms de runs et de depots Hub. NE JAMAIS LE
 # MODIFIER : il renommerait tous les runs existants. Il doit aussi etre DIFFERENT de celui

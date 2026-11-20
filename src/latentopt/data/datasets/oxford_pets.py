@@ -21,7 +21,6 @@ from latentopt.data.datasets.base import Subset, require, reset
 from latentopt.data.paths import datasets_root
 
 SEG_NAME, DET_NAME = "oxford_pets_seg", "oxford_pets_det"
-SEG_CLASSES, DET_CLASSES = 3, 2
 FOLDER = "oxford-iiit-pet"
 # CRITIQUE : nom court du dataset dans les noms de runs et de depots Hub. NE JAMAIS LE
 # MODIFIER : il renommerait tous les runs existants. Il doit aussi etre DIFFERENT de celui
