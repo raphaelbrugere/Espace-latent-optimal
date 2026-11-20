@@ -17,7 +17,7 @@ Règle : ce qui change le résultat d'un run est dans `method/`, `data/`, `backb
 |---|---|---|---|
 | `pretrain.yaml` | `lo pretrain` | `backbone` (obligatoire), `method` (`lejepa`), `data` (`imagenette`), `cluster` (`local`), `experiment` | `seed`, `resume`, `allow_dirty`, `trainer.*` |
 | `train.yaml` | `lo train` | `backbone` (obligatoire), `neck`, `head` (ceux de la tâche), `cluster`, `experiment` | `task` (obligatoire), `neck_from`, `seed`, `epochs`, `max_steps_per_epoch`, `batch_size`, `precision`, `optimizer.*`, `cache_features`, `backbone_run`, `backbone_data`, `backbone_method`, `resume`, `allow_dirty`, `trainer.*` |
-| `eval.yaml` | `lo eval` | `cluster` | `heads` (obligatoire), `split`, `cache_features`, `precision`, `batch_size`, `experiment_name` |
+| `eval.yaml` | `lo eval` | `cluster` | `downstream` (obligatoire), `split`, `cache_features`, `precision`, `batch_size`, `experiment_name`, `allow_dirty` |
 
 ## `backbone/` : l'extracteur de features
 
