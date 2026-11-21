@@ -151,7 +151,7 @@ Un job Slurm se lance avec un profil de [`launcher/`](launcher/) et **`-m`** :
 | Profil | Partition | Durée max | Nœuds | Pour |
 |---|---|---|---|---|
 | `launcher=long` | `gpu_prod_long` | 2 jours | RTX 3090 ou 3080 (GTX 1080 Ti exclues) : bf16 possible | pré-entraînements, têtes |
-| `launcher=short` | `gpu_inter` | 30 min (2 h max) | tous sauf GTX 1080 Ti, dont des RTX 2080 Ti : pas de bf16 | smoke runs |
+| `launcher=short` | `gpu_inter` | 30 min (2 h max) | tous sauf GTX 1080 Ti : RTX 3090, 3080, 2080 Ti, 5080 ; bf16 non garanti (2080 Ti) | smoke runs |
 
 ```bash
 uv run lo pretrain experiment=vit_lejepa_imagenette launcher=long -m
@@ -203,18 +203,45 @@ hydra:
 
 `uv run lo pretrain experiment=lamb_x_seed launcher=long -m` lance alors les 9 jobs.
 
-- **Coût** : 9 jobs de ~14 h font ~126 h GPU sur le fairshare commun (voir [Partitions](#partitions)).
-  Faire un smoke test d'abord.
+- **Coût** : les heures GPU d'un balayage se multiplient par le nombre de jobs, sur le fairshare
+  commun (voir [Partitions](#partitions)). Faire un smoke test d'abord.
 - **Noms** : les jobs d'un balayage partagent la date de soumission, suivie de `_1`, `_2`… Les
   valeurs balayées ne sont pas dans le nom : les retrouver dans MLflow (config complète).
 - **Têtes en parallèle sur un même backbone** : sans risque, le cache de features est partagé
   entre jobs simultanés (`evaluation/features.py`).
 
-### Durées mesurées
+### Réglages de `env` et ressources
 
-| Run | Nœud | Réglages | Durée |
-|---|---|---|---|
-| baseline (`vit_lejepa_imagenette`) | `sh00` (RTX 3080) | `grad_checkpointing`, sans `compile` | ~1 min par epoch, ~13-14 h pour 800 epochs |
+Ils ne changent pas le résultat, seulement les ressources. Valeur de `env=dce` entre parenthèses ;
+override : `env.<clé>=<valeur>`.
+
+| Réglage | CPU | GPU | RAM | Quand le changer |
+|---|---|---|---|---|
+| `num_workers` (6) | + 1 processus par worker | mieux alimenté si les données le font attendre | + par worker | GPU sous 100 % : en ajouter (cœurs du nœud − 1 au plus) ; RAM pleine : en retirer |
+| `grad_checkpointing` (`auto`) | — | mémoire ↓↓, calcul ↑ (forward refait au backward) : plus lent | — | `true` si la mémoire GPU manque, `false` si elle suffit. `auto` : actif sous 20 Go (seuil choisi pour la baseline) |
+| `compile` (`true`) | compilation au démarrage | plus rapide ensuite ; 1re epoch plus longue | compilation au démarrage | `false` pour déboguer ; `true` arrête le job si Triton manque |
+| `device` (`cuda`) | calcul si `cpu` | calcul si `cuda` | — | `cpu` : smoke run sans GPU |
+| `data_root` (`<dépôt>/data`) | — | — | — | données lentes à lire (home réseau) : copier dans `$TMPDIR` et y pointer `DATA_ROOT` |
+| `progress_bar` (`false`) | — | — | — | `true` en `srun` pour voir les it/s |
+| `mlflow` (`true`) | — | — | — | `false` : pas de `mlflow.db` |
+
+La précision joue aussi sur la vitesse et la mémoire GPU, mais elle est dans la recette
+(`method.precision`) : elle peut changer le résultat.
+
+**Avant un run long, évaluer les meilleurs réglages pour ce type de nœud et ce modèle** : ils
+dépendent du GPU, des cœurs, du modèle et du batch. Sur un nœud du type visé (`srun -w <nœud>`),
+lancer ~10 epochs (`method.epochs=10 env.progress_bar=true`) en changeant un réglage à la fois,
+et comparer la durée par epoch à partir de la 3e. Depuis un second terminal sur le nœud
+(`srun --jobid=<job_id> --overlap --pty bash`) :
+
+```bash
+nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv -l 2
+```
+
+- GPU sous 100 % : les données freinent (`num_workers`, `$TMPDIR`) ;
+- mémoire libre avec `grad_checkpointing` : essayer sans.
+
+Garder la combinaison la plus rapide qui tient en mémoire.
 
 ### Pièges
 
@@ -231,10 +258,10 @@ hydra:
 | Emplacement | Usage | Remarques |
 |---|---|---|
 | `~` (home) | code, environnement, données, sorties | stockage réseau partagé entre les nœuds, permanent, mais lent |
-| `$TMPDIR` | fichiers temporaires d'un job | `/tmp/<login>-<job_id>` sur le disque local du nœud (environ 200 Go libres) : rapide, effacé à la fin de l'allocation |
+| `$TMPDIR` | fichiers temporaires d'un job | `/tmp/<login>-<job_id>` sur le disque local du nœud : rapide, effacé à la fin de l'allocation |
 | `/mounts/datasets` | datasets, modèles et venvs déposés par les admins (sous-dossiers `datasets`, `models`, `venvs`…) | lecture seule, 6 To ; regarder s'il contient déjà un dataset avant de le télécharger |
 
-Aucun quota n'est imposé pour l'instant, mais l'espace est partagé entre environ 600 comptes. Il faut rester sous 100 Go et faire le ménage au-delà de 200 Go.
+L'espace du home est partagé entre tous les comptes du DCE : faire le ménage régulièrement.
 
 ```bash
 du -ahd1 ~ | sort -hr | head    # ce qui prend de la place
@@ -265,7 +292,9 @@ Internet : la passerelle et les nœuds GPU y ont accès (testé). Python systèm
 
 ### Nœuds GPU
 
-Chaque nœud a 1 GPU, qui vient avec le nœud : Slurm ne déclare pas de gres (`Gres=(null)` dans `scontrol show node`), donc on ne demande ni `--gres` ni `--gpus-per-node`, sinon `sbatch` refuse le job. Le driver est le 610 (CUDA 13.3), ce qui suffit pour `torch 2.15` (CUDA 13.2). Les RTX 2080 Ti sont prises en charge : `sm_75` figure dans `torch.cuda.get_arch_list()` (vérifié sur tx00 le 2026-11-05).
+Chaque nœud a 1 GPU, qui vient avec le nœud : Slurm ne déclare pas de gres (`Gres=(null)` dans `scontrol show node`), donc on ne demande ni `--gres` ni `--gpus-per-node`, sinon `sbatch` refuse le job. Driver : 610 (CUDA 13.3) sur tx00 le 2026-11-05, 615 (CUDA 13.4) sur dani02 le 2026-11-21 ; tous deux suffisent pour `torch 2.15` (CUDA 13.2).
+
+`torch.cuda.get_arch_list()` (propre au paquet torch, pas au nœud) : `sm_75` à `sm_120`. RTX 2080 Ti, 3090, 3080 et 5080 sont donc prises en charge, pas les GTX 1080 Ti (`sm_61`).
 
 GPU d'après la documentation officielle, partitions d'après le relevé. CPU : 1 socket, 2 threads par cœur ; « cœurs » compte les threads vus par Slurm. RAM : 32 Go (30 Go utilisables).
 
@@ -279,18 +308,18 @@ GPU d'après la documentation officielle, partitions d'après le relevé. CPU : 
 
 Lors du relevé, `sh01`–`sh16` étaient en maintenance (`drain`) : seuls 6 nœuds servaient `gpu_prod_long`.
 
-Les GTX 1080 Ti (`sm_61`) ne sont sans doute plus prises en charge par les wheels PyTorch CUDA 13 (à vérifier avec `torch.cuda.get_arch_list()` sur un `sh10`–`sh16`). Les deux profils les excluent (`exclude: sh[10-16]`) ; si elles s'avèrent utilisables en fp16, l'exclusion peut être retirée de `short`.
+Les deux profils excluent donc les GTX 1080 Ti (`exclude: sh[10-16]`).
 
 Choix de la précision :
 - **`16-mixed` (fp16) par défaut** : marche sur tous les nœuds.
-- **`bf16-mixed`** exige une Ampere ou une Blackwell (capacité de calcul ≥ 8.0) : RTX 3090, 3080, 5080. Avec `launcher=long`, c'est garanti (3090 et 3080 seulement). Sur un autre GPU, `lo` s'arrête au démarrage, plutôt qu'un bf16 émulé des dizaines de fois plus lent.
+- **`bf16-mixed`** exige une Ampere ou une Blackwell (capacité de calcul ≥ 8.0) : RTX 3090, 3080, 5080. Avec `launcher=long`, c'est garanti (3090 et 3080 seulement). Sur un autre GPU, `lo` s'arrête au démarrage, plutôt qu'un bf16 émulé, beaucoup plus lent.
 
-Mémoire GPU : 24 Go sur une RTX 3090, 10 Go sur une RTX 3080, toutes deux servies par `gpu_prod_long`. Sans `grad_checkpointing`, la baseline demande ~22 Go (plus de 9,6 Go dès le premier pas sur `sh00`) ; avec, ~5-6 Go, pour ~25 % de temps en plus. `env=dce` met `grad_checkpointing: auto` : activé sur un GPU de moins de 20 Go (3080, 2080 Ti, 5080), désactivé au-delà (3090). Seuil calibré sur la baseline : un modèle ou un batch plus gros peut demander `env.grad_checkpointing=true`.
+Mémoire GPU : 24 Go sur une RTX 3090, 10 Go sur une RTX 3080, toutes deux servies par `gpu_prod_long`. Sans `grad_checkpointing`, la baseline ne tient pas sur une RTX 3080 (plus de 9,6 Go dès le premier pas sur `sh00`). `env=dce` met `grad_checkpointing: auto` : activé sur un GPU de moins de 20 Go (3080, 2080 Ti, 5080), désactivé au-delà (3090). Effet sur les ressources : voir [Réglages de `env`](#réglages-de-env-et-ressources).
 
-`torch.compile` : `env=dce` l'exige (`compile: true`). Il faut Triton (installé avec torch) et un compilateur C : `/usr/bin/gcc` est présent et `has_triton()` vrai (vérifié sur tx08 le 2026-11-21).
+`torch.compile` : `env=dce` l'exige (`compile: true`). Il faut Triton (installé avec torch) et un compilateur C : `/usr/bin/gcc` est présent et `has_triton()` vrai (vérifié sur tx08 et dani02 le 2026-11-21).
 
 Chargement des données :
-- **`num_workers` à 6 au plus** : un nœud n'a que 8 cœurs.
+- **`num_workers`** : 6 dans `env=dce`, ce qui laisse de la marge sur tous les nœuds (8 cœurs sur `sh` et `tx`, 12 sur `dani`).
 - **Si le chargement ralentit l'entraînement**, copier le dataset dans `$TMPDIR` au début du job : le home est un disque réseau, plus lent.
 
 `nvidia-smi` n'existe que sur les nœuds GPU, pas sur la passerelle. Pour l'exécuter sans session interactive :
