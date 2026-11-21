@@ -36,9 +36,9 @@ def tool(name: str, *overrides: str, root) -> None:
         "latentopt.cli",
         *name.split(),
         *overrides,
-        "cluster=ci",
-        f"cluster.data_root='{root}/data'",
-        f"cluster.results_root='{root}/results'",
+        "env=ci",
+        f"env.data_root='{root}/data'",
+        f"env.results_root='{root}/results'",
     ]
     # stdin ferme : pas de terminal, donc pas de question " commit non pousse " (run.confirm_pushed)
     proc = subprocess.run(
@@ -228,7 +228,7 @@ def test_mlflow_sync_gathers_every_stage(pipeline):
 
     for r in [pre, *trained]:
         assert r.info.status == "FINISHED"
-        assert r.data.tags["git_commit"] and r.data.tags["cluster"] == "ci"
+        assert r.data.tags["git_commit"] and r.data.tags["env"] == "ci"
         assert {a.path for a in client.list_artifacts(r.info.run_id)} >= {
             "config.yaml",
             "results.json",

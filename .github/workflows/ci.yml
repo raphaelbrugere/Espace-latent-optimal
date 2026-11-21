@@ -36,7 +36,7 @@ jobs:
 
   # Smoke test de bout en bout (tests/test_pipeline.py) : `lo pretrain experiment=smoke`,
   # puis `lo train experiment=smoke_train` sur le backbone obtenu (from_run), puis
-  # `lo eval` et `lo mlflow sync`, avec cluster=ci (CPU, données synthétiques).
+  # `lo eval` et `lo mlflow sync`, avec env=ci (CPU, données synthétiques).
   # Remplace le smoke run manuel avant tout job long ; job séparé : un échec ici désigne
   # le pipeline, pas un test unitaire.
   smoke:

@@ -9,7 +9,8 @@
 # par son chemin, ou par <run>/downstream/<...> : telecharge depuis le Hub s'il manque en local.
 defaults:
   - common/hydra
-  - cluster: local
+  - env: local # local | ci | dce (configs/env/) : la machine, sans effet sur le resultat
+  - launcher: null # null | long | short (slurm/launcher/) : job Slurm, avec -m ; choisit env=dce
   - _self_
 
 downstream: ??? # dossiers downstream/<...>, sur un ou plusieurs backbones
@@ -22,8 +23,12 @@ experiment_name: default
 allow_dirty: true # une evaluation ne s'entraine pas : pas de garde-fou git
 
 hydra:
+  # profils Slurm (launcher=long|short) : dans slurm/launcher/, hors de configs/. Seule la
+  # config de premier niveau peut etendre le chemin de recherche de Hydra.
+  searchpath:
+    - file://${project_root:}/slurm
   run: # journal du lancement seulement : les resultats vont dans eval/ de chaque entrainement
-    dir: ${cluster.results_root}/.eval/${now:%Y%m%d_%H%M%S}
+    dir: ${env.results_root}/.eval/${now:%Y%m%d_%H%M%S}
   sweep:
     dir: ${hydra.run.dir}
     subdir: ${hydra.job.num}

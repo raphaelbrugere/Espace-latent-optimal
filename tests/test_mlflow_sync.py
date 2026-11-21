@@ -18,7 +18,7 @@ GIT = {"commit": "abc", "branch": "main", "dirty": False, "changed": []}
 def make_run(results, stage, exp, name, status="success", losses=(1.0, 0.5, 0.25)):
     """Un dossier de run complet : fichiers legers + base MLflow du run."""
     cfg = OmegaConf.create(
-        {"cluster": {"name": "local", "results_root": results.as_posix(), "mlflow": True},
+        {"env": {"name": "local", "results_root": results.as_posix(), "mlflow": True},
          "experiment_name": exp, "allow_dirty": False, "seed": 0}
     )  # fmt: skip
     run_dir = results / stage / exp / name

@@ -107,7 +107,7 @@ uv run lo train backbone=from_run backbone.run=imnt160-vit_s8-lejepa-20261116_18
 uv run lo eval downstream='[imnt160-vit_s8-lejepa-20261116_183012/downstream/pets_seg-fpn-conv_seg-20261117_090000,...]'
 ```
 
-`results/` est `cluster.results_root` (variable `OUTPUT_ROOT`, sinon `<projet>/results`).
+`results/` est `env.results_root` (variable `OUTPUT_ROOT`, sinon `<projet>/results`).
 
 ## Dossiers de sortie
 
@@ -164,7 +164,7 @@ avec vérification des MD5 ([DATASETS.md](DATASETS.md)), et certains ne peuvent 
 
 Les bases MLflow (une `mlflow.db` par dossier de run : backbone, entraînements, évaluations) sont
 publiées : `lo mlflow sync` les relit sur le Hub pour construire la base d'équipe `data/mlflow.db`
-([slurm/COMMANDS.md](../slurm/COMMANDS.md), section 9).
+([COMMANDS.md](COMMANDS.md), section 9).
 
 ## Télécharger
 

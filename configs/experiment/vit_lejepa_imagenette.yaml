@@ -3,11 +3,10 @@
 # autres experiences.
 #
 # Prerequis : lo data prepare imagenette
-#   lo pretrain experiment=vit_lejepa_imagenette cluster=dce -m
+#   lo pretrain experiment=vit_lejepa_imagenette launcher=long -m
 #
-# bf16 : gpu_prod_long ne sert que des noeuds sh (RTX 3080, bf16 materiel), voir docs/CLUSTER.md.
-# Duree mesuree sur sh00 (grad_checkpointing, sans compile) : ~1 min par epoch, soit ~13-14 h pour
-# les 800 epochs.
+# bf16 : exige un GPU Ampere ou plus recent (verifie au demarrage, run.py) ; launcher=long n'en
+# sert que. Duree mesuree et noeuds : slurm/README.md.
 defaults:
   - override /backbone: vit_s8
   - override /data: imagenette

@@ -7,4 +7,4 @@ _target_: latentopt.models.backbones.external.dino.dino_vits8
 img_size: 128 # poids pre-entraines en 224px ; position embeddings reechantillonnes
 blocks: [2, 5, 8, 11]
 drop_path_rate: 0.0
-grad_checkpointing: ${oc.select:cluster.grad_checkpointing,false} # environnement (cluster/)
+grad_checkpointing: false # lo pretrain y ecrit env.grad_checkpointing, resolu (run.py)

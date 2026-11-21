@@ -25,7 +25,7 @@ TINY = [
     "backbone.arch=vit_tiny_patch16_224",
     "backbone.embed_dim=32",
     "backbone.blocks=[0,1]",
-    "cluster=ci",
+    "env=ci",
 ]
 
 
@@ -36,7 +36,7 @@ def load_tool(name: str):
 def config(name: str, overrides: list[str], data_root):
     with initialize_config_dir(config_dir=str(PROJECT_ROOT / "configs"), version_base="1.3"):
         cfg = compose(config_name=name, overrides=overrides)
-    cfg.cluster.data_root = str(data_root)
+    cfg.env.data_root = str(data_root)
     return cfg
 
 

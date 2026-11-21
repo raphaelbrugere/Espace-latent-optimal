@@ -4,7 +4,7 @@ defaults:
   - _base
   - _self_
 
-cluster:
+env:
   name: local
   num_workers: 4
   device: auto # cuda si disponible, sinon cpu

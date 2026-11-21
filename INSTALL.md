@@ -51,14 +51,14 @@ Tout le monde (local, CI, DCE) utilise exactement les mêmes versions :
 | Bibliothèques Python et outils de dev (pytest, ruff, pre-commit) | `uv.lock` (versions exactes et empreintes) ; les `>=` de `pyproject.toml` ne sont que des minimums |
 | Hooks pre-commit | `.pre-commit-config.yaml` (`rev`) |
 | Actions GitHub | `.github/workflows/lint.yml` et `ci.yml` |
-| gh (DCE) | `docs/CLUSTER.md`, étape 6 |
+| gh (DCE) | `slurm/README.md`, étape 6 |
 
 Pour changer une version : modifier le fichier concerné dans une PR, puis `uv self update <version>` (uv) ou `uv sync` (Python, bibliothèques) sur chaque machine.
 
 Deux versions sont écrites à deux endroits, à garder identiques à la main :
 
 - **ruff** : dans `uv.lock` (`uv run ruff`, et l'extension VS Code grâce à `"ruff.importStrategy": "fromEnvironment"` dans `.vscode/settings.json` ; sans ce réglage, elle utiliserait sa propre copie) et dans `.pre-commit-config.yaml` (hooks, CI). Si elles divergent, le formatage de l'éditeur et celui de la CI peuvent différer. Pour changer : `uv add --dev "ruff==<version>"` et le `rev` du hook `ruff-pre-commit`.
-- **uv** : dans `pyproject.toml` et dans les commandes d'installation de ce fichier (étape 1) et de `docs/CLUSTER.md` (étape 4).
+- **uv** : dans `pyproject.toml` et dans les commandes d'installation de ce fichier (étape 1) et de `slurm/README.md` (étape 4).
 - **Triton** : sous Linux, `triton` est une dépendance de torch (version dans `uv.lock`) ; sous Windows, `triton-windows` est déclaré dans `pyproject.toml`. Quand torch change, aligner la fourchette de `triton-windows` sur la majeure.mineure de `triton` dans `uv.lock`, puis `uv lock`.
 
 ## Ce que font les extensions VS Code
@@ -105,9 +105,9 @@ utilisé que s'il est compatible : pilote NVIDIA qui accepte CUDA 13.2 (`nvidia-
 « CUDA Version » maximale du pilote) et carte prise en charge par torch (RTX 20xx et plus récentes ;
 pas les GTX 10xx). Avant chaque run, `lo` fait un calcul d'essai sur le GPU (`run.cuda_problem`) :
 
-- `cluster=local` (`device: auto`) : GPU compatible, sinon CPU, avec un avertissement qui donne la
+- `env=local` (`device: auto`) : GPU compatible, sinon CPU, avec un avertissement qui donne la
   raison si un GPU NVIDIA est présent ;
-- `cluster=dce` (`device: cuda`) : GPU incompatible, le run s'arrête avec la raison, au lieu de
+- `env=dce` (`device: cuda`) : GPU incompatible, le run s'arrête avec la raison, au lieu de
   tourner des heures sur CPU.
 
 Pour vérifier sans lancer de run :
@@ -128,5 +128,5 @@ Un smoke run (`uv run lo pretrain experiment=smoke`) vérifie le reste de l'inst
 Données : rien n'est téléchargé à l'installation. `uv run lo data prepare` les place dans `data/`
 (voir [docs/DATASETS.md](docs/DATASETS.md)).
 
-Pour le cluster DCE, voir [docs/CLUSTER.md](docs/CLUSTER.md), et [slurm/COMMANDS.md](slurm/COMMANDS.md) pour
+Pour le cluster DCE, voir [slurm/README.md](slurm/README.md), et [docs/COMMANDS.md](docs/COMMANDS.md) pour
 toutes les commandes du projet.

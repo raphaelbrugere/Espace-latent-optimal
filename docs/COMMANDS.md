@@ -2,10 +2,12 @@
 
 Tout passe par la commande `lo`, préfixée par `uv run` (`uv run lo --help` liste les commandes
 par famille ; `latentopt` est son nom long). Elle se lance depuis n'importe quel dossier du dépôt.
-Installation du compte DCE, partitions et stockage : voir [docs/CLUSTER.md](../docs/CLUSTER.md).
+Installation du compte DCE, partitions, nœuds et pièges de Slurm : voir [slurm/README.md](../slurm/README.md).
 
-Sur le DCE, `cluster=dce` soumet un job Slurm via submitit, à condition d'ajouter **`-m`**. Sans
-`-m`, le script refuse de tourner sur la passerelle. `-m` se place **après tous les overrides**.
+Sur le DCE, `launcher=long` (ou `launcher=short`) soumet un job Slurm via submitit, à condition
+d'ajouter **`-m`**. Sans `-m`, le script refuse de tourner sur la passerelle. `-m` se place
+**après tous les overrides**. La commande garde le terminal jusqu'à la fin des jobs : la lancer
+dans `tmux` ([slurm/README.md](../slurm/README.md#lancer-un-job)).
 
 ## 1. Après chaque `git pull`
 
@@ -40,68 +42,68 @@ Sur une RTX 2080 Ti (nœuds `tx`), `sm_75` doit figurer dans la liste.
 | où | commande |
 |---|---|
 | local, CPU | `uv run lo pretrain experiment=smoke` |
-| DCE, dans une session `srun` | `uv run lo pretrain experiment=smoke cluster=dce method.precision=fp16` |
-| DCE, job Slurm | `uv run lo pretrain experiment=smoke cluster=dce method.precision=fp16 hydra.launcher.partition=gpu_inter hydra.launcher.timeout_min=30 -m` |
+| DCE, dans une session `srun` | `uv run lo pretrain experiment=smoke env=dce method.precision=fp16` |
+| DCE, job Slurm | `uv run lo pretrain experiment=smoke launcher=short method.precision=fp16 -m` |
 | têtes, local | `uv run lo train experiment=smoke_train task=synthetic_cls,synthetic_seg,synthetic_det -m` |
 
-Dans une session `srun`, `cluster=dce` fonctionne sans `-m`, puisqu'on est déjà dans un job Slurm.
+Dans une session `srun`, `env=dce` fonctionne sans `-m`, puisqu'on est déjà dans un job Slurm.
 `method.precision=fp16` sert à tester le GradScaler sur GPU. Le smoke run est en fp32 par défaut,
 pour pouvoir tourner sur CPU.
 
 ## 5. Pré-entraînement d'un backbone
 
 ```bash
-# baseline (bf16, gpu_prod_long, 800 epochs)
-uv run lo pretrain experiment=vit_lejepa_imagenette cluster=dce -m
+# baseline (bf16, 800 epochs, ~14 h)
+uv run lo pretrain experiment=vit_lejepa_imagenette launcher=long -m
 
 # changer un réglage
-uv run lo pretrain experiment=vit_lejepa_imagenette method.model.lamb=0.05 cluster=dce -m
+uv run lo pretrain experiment=vit_lejepa_imagenette method.model.lamb=0.05 launcher=long -m
 
-# balayer plusieurs valeurs : un job par valeur
-uv run lo pretrain experiment=vit_lejepa_imagenette method.model.lamb=0.01,0.02,0.05 cluster=dce -m
+# balayer plusieurs valeurs : un job par combinaison (ici 3 x 3 = 9 jobs, 4 a la fois)
+uv run lo pretrain experiment=vit_lejepa_imagenette method.model.lamb=0.01,0.02,0.05 seed=0,1,2 launcher=long -m
 
-# grad_checkpointing : activé par défaut avec cluster=dce (sans lui, OOM sur une RTX 3080).
-# Sur une 3090 (24 Go), le désactiver va ~25 % plus vite, même résultat :
-uv run lo pretrain experiment=vit_lejepa_imagenette cluster.grad_checkpointing=false cluster=dce -m
+# grad_checkpointing : auto avec env=dce (active sur une RTX 3080, pas sur une 3090) ;
+# true ou false pour l'imposer, meme resultat :
+uv run lo pretrain experiment=vit_lejepa_imagenette env.grad_checkpointing=true launcher=long -m
 
 # reprendre un run interrompu
-uv run lo pretrain experiment=vit_lejepa_imagenette resume=results/<run>/backbone/checkpoints/last.ckpt cluster=dce -m
+uv run lo pretrain experiment=vit_lejepa_imagenette resume=results/<run>/backbone/checkpoints/last.ckpt launcher=long -m
 ```
 
 Sortie : `results/<données>-<archi>-<méthode>-<AAAAMMJJ_HHMMSS>/backbone/` (`backbone.pt`, `results.json`,
 `README.md`, `run.log`, `metrics.csv`, `config.yaml`, `git.txt`, `lineage.json`, `mlflow.db`). Dans un balayage `-m`, les
 jobs 1, 2… ajoutent `_1`, `_2`… à la date. `<données>-<archi>-<méthode>-<date>` est le dossier du backbone, de
-ses entraînements downstream et de leurs évaluations, et son dépôt Hugging Face ([docs/HUB.md](../docs/HUB.md)).
+ses entraînements downstream et de leurs évaluations, et son dépôt Hugging Face ([docs/HUB.md](HUB.md)).
 
 ## 6. Entraînement des necks et des têtes (backbone gelé)
 
 ```bash
 # une tâche, sur un de nos backbones
-uv run lo train backbone=from_run backbone.run=<run> task=pets_seg cluster=dce -m
+uv run lo train backbone=from_run backbone.run=<run> task=pets_seg launcher=long -m
 
 # les 5 tâches, un job chacune
 uv run lo train backbone=from_run backbone.run=<run> \
-    task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det cluster=dce -m
+    task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det launcher=long -m
 
 # référence DINO (poids externes), mêmes 5 tâches ; backbone_run fixé pour que les 5 jobs
 # rangent leurs têtes sous le même nom de backbone (sinon chaque job date le sien)
 uv run lo train backbone=vit_s8_dino experiment_name=dino backbone_data=imagenet1k backbone_method=dino \
     backbone_run=imagenet1k-vit_s8_dino-dino-<AAAAMMJJ_HHMMSS> \
-    task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det cluster=dce -m
+    task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det launcher=long -m
 
 # un autre neck ou une autre tête, ou d'autres réglages
-uv run lo train backbone=from_run backbone.run=<run> task=pets_seg neck=fpn neck.channels=128 head=conv_seg epochs=50 cluster=dce -m
+uv run lo train backbone=from_run backbone.run=<run> task=pets_seg neck=fpn neck.channels=128 head=conv_seg epochs=50 launcher=long -m
 
 # une tête sur un neck déjà entraîné (gelé) : seule la tête apprend
-uv run lo train backbone=from_run backbone.run=<run> task=pets_det head=soft_argmax neck_from=pets_seg-fpn-conv_seg-<AAAAMMJJ_HHMMSS> cluster=dce -m
+uv run lo train backbone=from_run backbone.run=<run> task=pets_det head=soft_argmax neck_from=pets_seg-fpn-conv_seg-<AAAAMMJJ_HHMMSS> launcher=long -m
 
 # sans cache de features : backbone appliqué à la volée (voir plus bas)
-uv run lo train backbone=from_run backbone.run=<run> task=pets_seg cache_features=false cluster=dce -m
+uv run lo train backbone=from_run backbone.run=<run> task=pets_seg cache_features=false launcher=long -m
 ```
 
 Sans précision, le neck, la tête et le nombre d'epochs sont ceux de la baseline de chaque tâche.
 
-Sortie, dans le dossier du backbone `results/<run>/` ([docs/HUB.md](../docs/HUB.md)) :
+Sortie, dans le dossier du backbone `results/<run>/` ([docs/HUB.md](HUB.md)) :
 `downstream/<tâche>-<neck>-<tête>-<AAAAMMJJ_HHMMSS>/` : `neck.pt`, `head.pt`, `README.md`, `results.json`
 (score val, paramètres du neck et de la tête séparés, du backbone), `config.yaml`, `run.log`, `mlflow.db`.
 Avec `neck_from`, pas de `neck.pt` : le neck repris reste gelé, et `results.json` désigne son dossier.
@@ -139,7 +141,7 @@ ls results/.submitit/<job_id>/                      # sorties brutes de Slurm (s
 
 ## 9. Comparer les runs (MLflow)
 
-Mode d'emploi court (usage local, filtres, comparaisons) : [docs/MLFLOW.md](../docs/MLFLOW.md).
+Mode d'emploi court (usage local, filtres, comparaisons) : [docs/MLFLOW.md](MLFLOW.md).
 
 Chaque run (`pretrain`, `train`, et chaque évaluation de `eval`) a sa propre base MLflow,
 `<dossier du run>/mlflow.db`.
@@ -150,11 +152,11 @@ réseau. Un run MLflow contient :
 |---|---|
 | Expérience | `pretrain/<experiment_name>`, `train/<experiment_name>`, `eval/<experiment_name>` |
 | Nom | chemin du dossier sous `results/` : `<run>/backbone`, `<run>/downstream/<tâche>-<neck>-<tête>-<date>` (train), suivi de `/eval/<split>-<date>` (eval) |
-| Paramètres | config résolue complète, aplatie (`method/lr`, `backbone/arch`…), y compris `cluster/*` (propre à la machine) |
+| Paramètres | config résolue complète, aplatie (`method/lr`, `backbone/arch`…), y compris `env/*` (propre à la machine) |
 | Métriques | courbes par pas et par epoch (`train/*`, `val/*`) ; résultats finaux `results/*` (scores, paramètres, heures GPU) |
-| Tags : nom | `data`, `arch`, `method`, `backbone_date`, `backbone_run`, `hub_repo` (dépôt de destination, [docs/HUB.md](../docs/HUB.md)), plus `task`, `neck`, `head` et `downstream` (nom du dossier d'entraînement, commun à l'entraînement et à ses évaluations) |
+| Tags : nom | `data`, `arch`, `method`, `backbone_date`, `backbone_run`, `hub_repo` (dépôt de destination, [docs/HUB.md](HUB.md)), plus `task`, `neck`, `head` et `downstream` (nom du dossier d'entraînement, commun à l'entraînement et à ses évaluations) |
 | Tags : traçabilité | `author`, `git_commit`, `git_branch`, `git_dirty`, `uv_lock_sha256`, `splits/<dataset>_sha256`, `results/backbone_sha256` |
-| Tags : machine | `host`, `cluster`, `slurm_job_id`, `env/python`, `env/torch`, `env/cuda`, `env/gpu`, `run_dir` |
+| Tags : machine | `host`, `env`, `slurm_job_id`, `env/python`, `env/torch`, `env/cuda`, `env/gpu`, `run_dir` |
 | Tags : évaluation | `eval_split` : `val` ou `test` |
 
 N'y entrent jamais : les poids (dossier du run, Hub) et les variables d'environnement (tokens).
@@ -199,7 +201,7 @@ ssh -N -L 5000:localhost:5000 dce
 
 Choisir un autre port si 5000 est pris (la passerelle est partagée). Suivre un run en cours :
 `--backend-store-uri sqlite:///<dossier du run>/mlflow.db`, ou `tail -f <dossier du run>/run.log`.
-`cluster.mlflow=false` désactive le suivi ; `MLFLOW_TRACKING_URI` l'envoie vers un serveur.
+`env.mlflow=false` désactive le suivi ; `MLFLOW_TRACKING_URI` l'envoie vers un serveur.
 
 ## 10. Récupérer des résultats (sur sa machine)
 
@@ -221,12 +223,9 @@ Les fichiers cachés (`.gitkeep`) sont conservés. Il faut ensuite relancer la s
 - **Arbre git non commité.** Un job long sur le DCE refuse de partir si des fichiers ne sont pas
   commités (CONTRIBUTING.md). `allow_dirty=true` lève ce garde-fou, en connaissance de cause. Les smoke runs
   ne sont pas concernés.
-- **La précision.** fp16 par défaut, car un job peut tomber sur une 2080 Ti, qui n'a pas de bf16. Le bf16
-  n'est possible que sur `gpu_prod_long`, qui n'a que des nœuds `sh`. Le fp16 n'est pas disponible sur CPU.
-- **Ne pas demander de GPU à Slurm** (`--gres`, `--gpus-per-node`). Le DCE ne déclare pas de gres :
-  `sbatch` échoue avec « Invalid generic resource (gres) specification ». Le GPU vient avec le nœud
-  d'une partition `gpu_*`.
-- **Le compte est partagé à trois** (fairshare commun). Chaque heure de GPU fait baisser la priorité
-  de toute l'équipe : faire un smoke test d'abord.
+- **La précision.** fp16 par défaut : il marche sur tout GPU. Le bf16 exige un GPU Ampere ou plus
+  récent ; sur un GPU plus ancien, le run s'arrête au démarrage. `launcher=long` ne sert que des
+  GPU compatibles. Le fp16 n'est pas disponible sur CPU.
+- **Pièges propres à Slurm et au DCE** (gres, fairshare, nœuds) : [slurm/README.md](../slurm/README.md#pièges).
 - **Windows, en local.** Avec beaucoup de workers, Windows peut manquer de mémoire virtuelle
-  (`WinError 1455`). Dans ce cas, `cluster.num_workers=2`.
+  (`WinError 1455`). Dans ce cas, `env.num_workers=2`.

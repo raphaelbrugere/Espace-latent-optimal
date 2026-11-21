@@ -1,0 +1,19 @@
+# @package _global_
+# DCE de CentraleSupelec : la machine seulement. Les ressources Slurm (partition, duree,
+# noeuds) sont dans slurm/launcher/, qui choisit cet environnement ; voir slurm/README.md.
+#
+#   lo pretrain experiment=<nom> launcher=long -m    # job Slurm
+#   lo pretrain experiment=smoke env=dce             # session interactive sur un noeud
+defaults:
+  - _base
+  - _self_
+
+env:
+  name: dce
+  num_workers: 6 # 8 coeurs par noeud : en laisser pour le processus principal
+  device: cuda
+  progress_bar: false # la barre de progression pollue les logs Slurm ; suivre run.log
+  grad_checkpointing: auto # indispensable sur 10 Go, inutile sur 24 Go (slurm/README.md)
+  # tous les runs du DCE compiles ; sinon arret au demarrage plutot qu'un job plus lent en eager.
+  # gcc et Triton verifies sur tx08 le 2026-11-21.
+  compile: true

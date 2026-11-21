@@ -1,0 +1,25 @@
+# @package _global_
+# Job long sur le DCE (2 jours max) : pre-entrainements, entrainements de tetes. Voir README.md.
+#
+#   lo pretrain experiment=vit_lejepa_imagenette launcher=long -m
+#
+# Sans exclusion, gpu_prod_long sert des RTX 3090, des RTX 3080 et des GTX 1080 Ti ; ces
+# dernieres exclues, chaque job tombe sur une Ampere (bf16 materiel).
+defaults:
+  - override /env: dce # un job Slurm tourne forcement sur le DCE
+  - override /hydra/launcher: submitit_slurm
+
+hydra:
+  launcher:
+    account: 3a_cs_ia_n40_safran
+    partition: gpu_prod_long
+    timeout_min: 2880
+    nodes: 1
+    tasks_per_node: 1
+    # le DCE ne declare pas de gres (Gres=(null)) : le GPU vient avec le noeud, ne pas le demander.
+    # --gpus-per-node fait echouer sbatch (" Invalid generic resource (gres) specification ").
+    gpus_per_node: null
+    cpus_per_task: 8
+    mem_gb: 24 # noeuds a 30 Go de RAM ; a ajuster si un job reste en attente
+    exclude: sh[10-16] # GTX 1080 Ti : pas de bf16, sans doute plus prises en charge par torch
+    array_parallelism: 4 # jobs simultanes d'un balayage : la limite par utilisateur de la partition

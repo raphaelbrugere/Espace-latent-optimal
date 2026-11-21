@@ -52,8 +52,10 @@ from latentopt.models.contract import count_params, weights_hash
 
 log = logging.getLogger(__name__)
 
-DEVICES = ("auto", "cpu", "cuda")  # cluster.device
-COMPILE_MODES = ("auto", True, False)  # cluster.compile (auto, true, false en YAML)
+DEVICES = ("auto", "cpu", "cuda")  # env.device
+COMPILE_MODES = ("auto", True, False)  # env.compile (auto, true, false en YAML)
+GRAD_CHECKPOINTING_MODES = ("auto", True, False)  # env.grad_checkpointing
+SMALL_GPU_GB = 20  # grad_checkpointing=auto : active en dessous (baseline : ~22 Go sans)
 ACCELERATORS = {"cpu": "cpu", "cuda": "gpu"}  # device resolu -> accelerator de Lightning
 PRECISIONS = {"fp32": "32-true", "fp16": "16-mixed", "bf16": "bf16-mixed"}
 
@@ -129,13 +131,13 @@ def lineage() -> dict[str, Any]:
 
 
 def check_launch(cfg: DictConfig, git: dict[str, Any]) -> None:
-    """Garde-fous avant tout calcul (CONTRIBUTING.md, docs/CLUSTER.md)."""
-    if cfg.cluster.name == "dce" and "SLURM_JOB_ID" not in os.environ:
+    """Garde-fous avant tout calcul (CONTRIBUTING.md, slurm/README.md)."""
+    if cfg.env.name == "dce" and "SLURM_JOB_ID" not in os.environ:
         raise RuntimeError(
-            "cluster=dce hors d'un job Slurm : le run tournerait sur la passerelle. "
-            "Ajouter -m pour soumettre via submitit, ou lancer depuis une session srun."
+            "env=dce hors d'un job Slurm : le run tournerait sur la passerelle. Soumettre "
+            "avec launcher=long (ou short) et -m, ou lancer depuis une session srun."
         )
-    long_run = cfg.cluster.name == "dce" and cfg.experiment_name != "smoke"
+    long_run = cfg.env.name == "dce" and cfg.experiment_name != "smoke"
     if long_run and git["dirty"] and not cfg.allow_dirty:
         raise RuntimeError(
             "job long avec un arbre git non commite (CONTRIBUTING.md) : commiter, ou "
@@ -144,15 +146,34 @@ def check_launch(cfg: DictConfig, git: dict[str, Any]) -> None:
 
 
 def lightning_settings(device: str, precision: str) -> dict[str, str]:
-    """device (cluster) et precision (methode) de la config -> arguments du Trainer."""
+    """device (env) et precision (methode) de la config -> arguments du Trainer."""
     accelerator = ACCELERATORS[resolve_device(device)]
     if accelerator == "cpu" and precision == "fp16":
         raise ValueError("fp16 n'est pas disponible sur CPU : precision=fp32 (ou bf16)")
+    if accelerator == "gpu" and precision == "bf16":
+        problem = bf16_problem()
+        if problem is not None:
+            raise RuntimeError(f"precision=bf16 : {problem}. precision=fp16, ou un autre GPU")
     return {"accelerator": accelerator, "precision": PRECISIONS[precision]}
 
 
+def bf16_problem() -> str | None:
+    """None si le GPU 0 a le bf16 materiel (Ampere ou plus recent), sinon la raison.
+
+    Pas torch.cuda.is_bf16_supported() : il accepte aussi un bf16 emule, des dizaines de fois
+    plus lent, et un job de 14 h deviendrait un job de plusieurs jours sans le dire.
+    """
+    import torch
+
+    major, minor = torch.cuda.get_device_capability(0)
+    if major >= 8:
+        return None
+    name = torch.cuda.get_device_name(0)
+    return f"{name} (sm_{major}{minor}) sans bf16 materiel (il faut une Ampere ou plus recente)"
+
+
 def resolve_device(device: str) -> str:
-    """cluster.device (auto, cpu, cuda) -> cpu ou cuda, le GPU seulement s'il est utilisable.
+    """env.device (auto, cpu, cuda) -> cpu ou cuda, le GPU seulement s'il est utilisable.
 
     auto : cuda si cuda_problem() ne trouve rien, sinon cpu (avertissement si un GPU NVIDIA est
     present mais inutilisable). cuda : erreur si le GPU est inutilisable, plutot qu'un job long
@@ -173,7 +194,7 @@ def resolve_device(device: str) -> str:
 
 
 def resolve_compile(mode: bool | str, accelerator: str) -> bool:
-    """cluster.compile (auto, true, false) -> compiler le backbone ou non (`lo pretrain`).
+    """env.compile (auto, true, false) -> compiler le backbone ou non (`lo pretrain`).
 
     torch.compile genere ses noyaux GPU avec Triton (installe par uv sync, INSTALL.md), qui
     demande un GPU pris en charge et un compilateur C. auto : compile si le run est sur GPU et
@@ -181,7 +202,7 @@ def resolve_compile(mode: bool | str, accelerator: str) -> bool:
     plus lent sans le savoir.
     """
     if mode not in COMPILE_MODES:
-        raise ValueError(f"cluster.compile : auto, true ou false, recu {mode!r}")
+        raise ValueError(f"env.compile : auto, true ou false, recu {mode!r}")
     if mode is False:
         return False
     problem = compile_problem(accelerator)
@@ -192,6 +213,30 @@ def resolve_compile(mode: bool | str, accelerator: str) -> bool:
     if accelerator == "gpu":  # sur CPU, l'eager va de soi : rien a signaler
         log.warning("compile=auto : backbone non compile, %s", problem)
     return False
+
+
+def resolve_grad_checkpointing(mode: bool | str, accelerator: str) -> bool:
+    """env.grad_checkpointing (auto, true, false) -> recalculer les activations du backbone au
+    backward ou non (`lo pretrain`). Meme resultat, ~5x moins de memoire GPU, ~25 % plus lent.
+
+    auto : seulement sur un GPU de moins de SMALL_GPU_GB (sans lui, la baseline manque de
+    memoire sur une RTX 3080 ; il ralentit pour rien une RTX 3090). Seuil calibre sur la
+    baseline : un modele ou un batch plus gros peut demander true.
+    """
+    if mode not in GRAD_CHECKPOINTING_MODES:
+        raise ValueError(f"env.grad_checkpointing : auto, true ou false, recu {mode!r}")
+    if mode != "auto":
+        return mode
+    if accelerator != "gpu":
+        return False
+    return gpu_memory_gb() < SMALL_GPU_GB
+
+
+def gpu_memory_gb() -> float:
+    """Memoire du GPU 0, en Go."""
+    import torch
+
+    return torch.cuda.get_device_properties(0).total_memory / 1e9
 
 
 def compile_problem(accelerator: str) -> str | None:
@@ -243,7 +288,7 @@ def prepare(cfg: DictConfig, run_dir: Path) -> dict[str, Any]:
     git = git_info()
     check_launch(cfg, git)
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "config.yaml").write_text(OmegaConf.to_yaml(cfg, resolve=True), encoding="utf-8")
+    write_config(cfg, run_dir)
     lines = [f"commit: {git['commit']}", f"branch: {git['branch']}", f"dirty: {git['dirty']}"]
     (run_dir / "git.txt").write_text("\n".join(lines + git["changed"]) + "\n", encoding="utf-8")
     git = {**git, "lineage": lineage()}
@@ -252,6 +297,12 @@ def prepare(cfg: DictConfig, run_dir: Path) -> dict[str, Any]:
     )
     log.info("run dir %s | commit %s%s", run_dir, git["commit"], " (dirty)" if git["dirty"] else "")
     return git
+
+
+def write_config(cfg: DictConfig, run_dir: Path) -> None:
+    """config.yaml : config complete resolue. A reecrire si le run complete sa config apres
+    prepare() (valeur resolue sur le noeud, ex. grad_checkpointing=auto)."""
+    (run_dir / "config.yaml").write_text(OmegaConf.to_yaml(cfg, resolve=True), encoding="utf-8")
 
 
 def save_backbone(run_dir: Path, backbone: nn.Module, **results: Any) -> dict[str, Any]:
@@ -282,7 +333,7 @@ def mlflow_uri(cfg: DictConfig, run_dir: Path) -> str | None:
     os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")  # message destine aux agents IA
     if os.environ.get("MLFLOW_TRACKING_URI"):
         return os.environ["MLFLOW_TRACKING_URI"]
-    if not cfg.cluster.get("mlflow", False):
+    if not cfg.env.get("mlflow", False):
         return None
     return "sqlite:///" + (run_dir.resolve() / MLFLOW_DB).as_posix()
 
@@ -292,7 +343,7 @@ def mlflow_run_name(cfg: DictConfig, run_dir: Path) -> str:
     `<run>/downstream/<tache>-<neck>-<tete>-<date>` (train), le meme suivi de
     `/eval/<split>-<date>` (eval). Hors de results_root : son nom."""
     try:
-        root = Path(cfg.cluster.results_root).resolve()
+        root = Path(cfg.env.results_root).resolve()
         return run_dir.resolve().relative_to(root).as_posix()
     except ValueError:  # dossier de run hors de results_root (override de hydra.run.dir)
         return run_dir.name
@@ -352,7 +403,7 @@ def mlflow_logger(
         "git_branch": str(git["branch"]),
         "git_dirty": str(git["dirty"]),
         "run_dir": run_dir.resolve().as_posix(),
-        "cluster": cfg.cluster.name,
+        "env": cfg.env.name,
         **env_tags(),
     }
     if "SLURM_JOB_ID" in os.environ:

@@ -219,7 +219,7 @@ def train_dir(
 
 
 def results_root() -> Path:
-    """results_root des configs cluster : OUTPUT_ROOT, sinon <projet>/results."""
+    """results_root des configs env : OUTPUT_ROOT, sinon <projet>/results."""
     return Path(os.environ.get("OUTPUT_ROOT") or PROJECT_ROOT / "results")
 
 

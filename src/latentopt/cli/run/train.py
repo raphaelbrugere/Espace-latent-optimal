@@ -90,14 +90,14 @@ def cached_datasets(
     cfg: DictConfig, task: Task, backbone: torch.nn.Module, keys: Sequence[str]
 ) -> tuple[CachedFeatures, CachedFeatures]:
     """Features train (deux variantes si retournement) et val, extraites ou relues."""
-    use_cuda = run.resolve_device(cfg.cluster.device) == "cuda"
+    use_cuda = run.resolve_device(cfg.env.device) == "cuda"
     common = dict(
         backbone=backbone,
         sha=weights_hash(backbone),
         task=task,
         keys=keys,
         batch_size=256,
-        num_workers=cfg.cluster.num_workers,
+        num_workers=cfg.env.num_workers,
         device=torch.device("cuda" if use_cuda else "cpu"),
         precision=cfg.precision,
         info={"backbone": OmegaConf.to_container(cfg.backbone, resolve=True)},
@@ -130,7 +130,7 @@ def build(cfg: DictConfig) -> tuple[FrozenBackboneModule, DataLoader, DataLoader
         train_collate = collate(native_targets=False)
     else:
         train_ds, val_ds = task.dataset("train", train=True), task.dataset("val")
-        workers, val_collate, train_collate = cfg.cluster.num_workers, task.collate_fn, None
+        workers, val_collate, train_collate = cfg.env.num_workers, task.collate_fn, None
 
     L.seed_everything(cfg.seed, workers=False)
     neck = recipe.build_neck(cfg.neck, backbone)
@@ -167,15 +167,15 @@ def names(task: Task, neck_from: str | None) -> tuple[str, str]:
 
 @hydra.main(version_base="1.3", config_path=CONFIGS_DIR, config_name="train")
 def main(cfg: DictConfig) -> None:
-    os.environ["DATA_ROOT"] = cfg.cluster.data_root
-    os.environ["OUTPUT_ROOT"] = cfg.cluster.results_root  # runs designes par leur nom (hub.locate)
+    os.environ["DATA_ROOT"] = cfg.env.data_root
+    os.environ["OUTPUT_ROOT"] = cfg.env.results_root  # runs designes par leur nom (hub.locate)
     run_dir = Path(HydraConfig.get().runtime.output_dir)
     if cfg.get("neck_from"):
         with open_dict(cfg):
             cfg.neck_from = neck_dir(str(cfg.neck_from), run_dir).as_posix()
     fill_defaults(cfg)
     git = run.prepare(cfg, run_dir)
-    settings = run.lightning_settings(cfg.cluster.device, cfg.precision)
+    settings = run.lightning_settings(cfg.env.device, cfg.precision)
     mlflow = run.mlflow_logger(cfg, "train", run_dir, git)
 
     module, train, val = build(cfg)
@@ -196,7 +196,7 @@ def main(cfg: DictConfig) -> None:
             ModelCheckpoint(dirpath=run_dir / "checkpoints", save_last=True, save_top_k=0),
             run.LogProgress(),
         ],
-        enable_progress_bar=cfg.cluster.progress_bar,
+        enable_progress_bar=cfg.env.progress_bar,
         devices=1,
         **settings,
     )

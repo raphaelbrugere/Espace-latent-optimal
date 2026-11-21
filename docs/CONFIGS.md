@@ -8,16 +8,20 @@ lo pretrain backbone=vit_s8 data=imagenette method.epochs=100
 lo train backbone=from_run backbone.run=<run> task=pets_seg neck=fpn neck.channels=128 head=conv_seg
 ```
 
-Règle : ce qui change le résultat d'un run est dans `method/`, `data/`, `backbone/`, `neck/` ou `head/`, jamais dans
-`cluster/`.
+Règle, vérifiée par `tests/test_configs.py` :
+- ce qui change le résultat d'un run est dans `method/`, `data/`, `backbone/`, `neck/`, `head/` ou `experiment/`,
+  et n'y lit jamais `env.*` ;
+- la machine (chemins, workers, device) est dans `env/`, qui ne change pas le résultat ;
+- les ressources demandées à Slurm (partition, durée, nœuds) sont hors de `configs/`, dans
+  [`slurm/launcher/`](../slurm/launcher/) : aucun nom de partition ni de nœud dans `configs/`.
 
 ## Premier niveau : un fichier par commande
 
 | Fichier | Commande | Groupes choisis | Clés propres |
 |---|---|---|---|
-| `pretrain.yaml` | `lo pretrain` | `backbone` (obligatoire), `method` (`lejepa`), `data` (`imagenette`), `cluster` (`local`), `experiment` | `seed`, `resume`, `allow_dirty`, `trainer.*` |
-| `train.yaml` | `lo train` | `backbone` (obligatoire), `neck`, `head` (ceux de la tâche), `cluster`, `experiment` | `task` (obligatoire), `neck_from`, `seed`, `epochs`, `max_steps_per_epoch`, `batch_size`, `precision`, `optimizer.*`, `cache_features`, `backbone_run`, `backbone_data`, `backbone_method`, `resume`, `allow_dirty`, `trainer.*` |
-| `eval.yaml` | `lo eval` | `cluster` | `downstream` (obligatoire), `split`, `cache_features`, `precision`, `batch_size`, `experiment_name`, `allow_dirty` |
+| `pretrain.yaml` | `lo pretrain` | `backbone` (obligatoire), `method` (`lejepa`), `data` (`imagenette`), `env` (`local`), `launcher`, `experiment` | `seed`, `resume`, `allow_dirty`, `trainer.*` |
+| `train.yaml` | `lo train` | `backbone` (obligatoire), `neck`, `head` (ceux de la tâche), `env`, `launcher`, `experiment` | `task` (obligatoire), `neck_from`, `seed`, `epochs`, `max_steps_per_epoch`, `batch_size`, `precision`, `optimizer.*`, `cache_features`, `backbone_run`, `backbone_data`, `backbone_method`, `resume`, `allow_dirty`, `trainer.*` |
+| `eval.yaml` | `lo eval` | `env`, `launcher` | `downstream` (obligatoire), `split`, `cache_features`, `precision`, `batch_size`, `experiment_name`, `allow_dirty` |
 
 ## `backbone/` : l'extracteur de features
 
@@ -30,13 +34,13 @@ img_size: ${oc.select:data.img_size,128} # celle du pool en pré-entraînement, 
 embed_dim: 512 # projection après le pooling ; null = token CLS
 blocks: [2, 5, 8, 11] # blocs exposés comme cartes de features
 drop_path_rate: 0.1
-grad_checkpointing: ${oc.select:cluster.grad_checkpointing,false} # réglé dans cluster/
+grad_checkpointing: false # lo pretrain y écrit env.grad_checkpointing, résolu
 ```
 
 | Fichier | Rôle | Clés |
 |---|---|---|
 | `vit_s8.yaml` | ViT-S/8 à poids aléatoires, baseline | celles ci-dessus |
-| `vit_s8_dino.yaml` | ViT-S/8 aux poids DINO (référence externe) | `img_size`, `blocks`, `drop_path_rate` ; `grad_checkpointing` lu dans `cluster/` |
+| `vit_s8_dino.yaml` | ViT-S/8 aux poids DINO (référence externe) | `img_size`, `blocks`, `drop_path_rate`, `grad_checkpointing` |
 | `from_run.yaml` | backbone d'un de nos pré-entraînements | `run` : dossier du run, absolu ou relatif à la racine (obligatoire) |
 
 ## `method/` : la méthode de pré-entraînement
@@ -110,18 +114,24 @@ Les dimensions (`feature_info`, `embed_dim`, `in_dim`, `num_classes`) sont fourn
 (`neck.channels=128`) garde le nom de sa config ; une variante retenue mérite son propre fichier. Les paramètres
 du neck et de la tête sont comptés séparément dans `results.json`.
 
-## `cluster/` : l'environnement d'exécution
+## `env/` : la machine
 
 | Clé | Rôle |
 |---|---|
 | `data_root`, `results_root` | emplacement des données et des résultats |
 | `mlflow` | base MLflow par run ; `false` = désactivé |
 | `num_workers`, `device`, `progress_bar` | DataLoader, matériel, affichage |
-| `grad_checkpointing` | recalcule les activations du backbone au backward : ~5x moins de mémoire GPU, ~25 % plus lent, même résultat. `false` par défaut, `true` sur `dce` (sans lui, OOM sur une RTX 3080) ; lu par les configs de `backbone/` |
+| `grad_checkpointing` | recalcule les activations du backbone au backward dans `lo pretrain` : ~5x moins de mémoire GPU, ~25 % plus lent, même résultat. `false` par défaut ; `auto` sur `dce` : activé sur un GPU de moins de 20 Go (la baseline en demande ~22 sans). La valeur résolue est écrite dans `backbone.grad_checkpointing` de `config.yaml` |
 | `compile` | `torch.compile` du backbone dans `lo pretrain` : `auto` (défaut) s'il tourne sur GPU avec Triton et un compilateur C, `true` l'exige (erreur au démarrage sinon ; défaut de `dce`), `false` jamais. Au bruit numérique près, sans effet sur le résultat ; l'état réel est noté dans `results.json` (`compiled`) |
-| `hydra.launcher.*` (`dce.yaml`) | job Slurm : partition, durée, CPU, mémoire, contrainte de nœud |
 
-Fichiers : `local.yaml` (machine personnelle), `ci.yaml` (GitHub Actions, CPU), `dce.yaml` (cluster, avec `-m`).
+Fichiers : `local.yaml` (machine personnelle), `ci.yaml` (GitHub Actions, CPU), `dce.yaml` (nœud du DCE).
+
+## `launcher` : le job Slurm (hors de `configs/`)
+
+`launcher=long` ou `launcher=short`, avec `-m`, soumet le run comme job Slurm. Les profils sont dans
+[`slurm/launcher/`](../slurm/launcher/), que les trois configs de premier niveau ajoutent au chemin de recherche
+de Hydra (`hydra.searchpath`). Un profil ne contient que `hydra.launcher.*` (partition, durée, CPU, mémoire,
+nœuds exclus) et choisit `env=dce`. Mode d'emploi : [slurm/README.md](../slurm/README.md#lancer-un-job).
 
 ## `experiment/` : une expérience complète
 

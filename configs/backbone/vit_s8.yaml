@@ -7,4 +7,4 @@ img_size: ${oc.select:data.img_size,128} # pre-entrainement : celle des donnees 
 embed_dim: 512 # projection apprise apres le pooling ; null = token CLS (384)
 blocks: [2, 5, 8, 11] # blocs exposes comme cartes de features (indices a partir de 0)
 drop_path_rate: 0.1
-grad_checkpointing: ${oc.select:cluster.grad_checkpointing,false} # environnement (cluster/)
+grad_checkpointing: false # lo pretrain y ecrit env.grad_checkpointing, resolu (run.py)

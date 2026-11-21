@@ -122,10 +122,10 @@ téléchargement interrompu qui a laissé un dossier incomplet n'est donc pas to
 `--force-download` repart de zéro.
 
 Sur le DCE, lancer cette commande depuis la passerelle, pour ne pas occuper un GPU pendant les
-téléchargements (voir [CLUSTER.md](CLUSTER.md)).
+téléchargements (voir [slurm/README.md](../slurm/README.md)).
 
 `DATA_ROOT` (variable d'environnement, défaut `<racine du projet>/data/`) contient les données. Pour
-`lo pretrain`, `lo train` et `lo eval`, c'est la config qui fait foi : `cluster.data_root` est recopié dans
+`lo pretrain`, `lo train` et `lo eval`, c'est la config qui fait foi : `env.data_root` est recopié dans
 `DATA_ROOT` au lancement (`local` et `dce` reprennent la variable d'environnement si elle est définie, `ci`
 l'ignore). Les trois sous-dossiers sont suivis par git grâce à un `.gitkeep`, leur contenu est ignoré :
 

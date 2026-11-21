@@ -8,6 +8,10 @@ recalculer le backbone a chaque epoch.
 - Dossier : la date (AAAA-MM-JJ_HH-MM-SS) le rend lisible et triable ; l'empreinte des
   poids permet de le retrouver (`*_<sha>`) : un backbone relit toujours ses propres
   features, jamais celles d'un autre.
+- Jobs simultanes (les 5 taches d'un backbone en parallele, `-m` sur le DCE) : tous
+  retiennent le plus ancien dossier `*_<sha>`, et chaque fichier est ecrit sous un nom
+  temporaire puis renomme. Un job ne lit donc jamais un fichier a moitie ecrit ; au pire,
+  deux jobs extraient la meme chose.
 
 - Cles : seules les entrees lues par la tete (`head.in_keys`) sont stockees : `embed`
   pese ~2 Ko par image, les 4 cartes d'un ViT-S/8 en 128px ~0,8 Mo (fp16).
@@ -25,9 +29,12 @@ recalculer le backbone a chaque epoch.
 import copy
 import json
 import logging
+import os
 import random
+import shutil
 import time
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -54,17 +61,35 @@ def variants(transform: Any) -> dict[str, Any]:
 
 
 def backbone_dir(sha: str, info: dict | None = None) -> Path:
-    """Dossier du backbone : le dossier existant `*_<sha16>`, sinon un nouveau, date."""
+    """Dossier du backbone : le plus ancien `*_<sha16>`, sinon un nouveau, date.
+
+    Deux jobs qui creent chacun le leur au meme moment retiennent ensuite tous deux le plus
+    ancien, et le perdant supprime le sien (encore vide : seulement info.json)."""
     root = features_root()
-    existing = sorted(root.glob(f"*_{sha[:16]}"))
+    pattern = f"*_{sha[:16]}"
+    existing = sorted(root.glob(pattern))
     if existing:
-        return existing[-1]
+        return existing[0]
     path = root / f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{sha[:16]}"
-    path.mkdir(parents=True)
+    path.mkdir(parents=True, exist_ok=True)  # meme seconde : meme dossier
     created = time.strftime("%Y-%m-%d %H:%M:%S")
-    payload = {"backbone_sha256": sha, "created": created, **(info or {})}
-    (path / "info.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return path
+    text = json.dumps({"backbone_sha256": sha, "created": created, **(info or {})}, indent=2)
+    _write_atomic(path / "info.json", lambda f: f.write_text(text + "\n", encoding="utf-8"))
+    oldest = sorted(root.glob(pattern))[0]
+    if oldest != path:
+        shutil.rmtree(path, ignore_errors=True)
+    return oldest
+
+
+def _write_atomic(path: Path, write: Callable[[Path], Any]) -> None:
+    """Ecrit via un fichier temporaire du meme dossier, puis le renomme : un lecteur voit le
+    fichier complet ou rien (os.replace est atomique, y compris sur le disque reseau)."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        write(tmp)
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def cache_path(
@@ -142,7 +167,7 @@ def load_or_extract(
             }
             entry["format"], entry["backbone_sha256"] = FORMAT, sha
             path.parent.mkdir(parents=True, exist_ok=True)
-            torch.save(entry, path)
+            _write_atomic(path, partial(torch.save, entry))
         entries.append(entry)
     return entries
 

@@ -42,6 +42,32 @@ def test_backbone_dir_is_created_once_and_reused(isolated_data):
     assert Fe.backbone_dir(sha) == first
 
 
+def test_concurrent_jobs_agree_on_the_oldest_backbone_dir(isolated_data, monkeypatch):
+    """Un autre job cree son dossier pendant que celui-ci cree le sien : tous deux retiennent
+    le plus ancien, et le perdant supprime le sien."""
+    sha = "cd" * 32
+    other = features_root() / f"2000-01-01_00-00-00_{sha[:16]}"
+    write = Fe._write_atomic
+
+    def racing(path, fn):
+        write(path, fn)
+        other.mkdir(parents=True)  # l'autre job, juste apres la creation du notre
+
+    monkeypatch.setattr(Fe, "_write_atomic", racing)
+    assert Fe.backbone_dir(sha) == other
+    assert [p.name for p in features_root().iterdir()] == [other.name]
+
+
+def test_write_atomic_leaves_only_the_complete_file(tmp_path):
+    target = tmp_path / "x.pt"
+    Fe._write_atomic(target, lambda f: f.write_text("ok", encoding="utf-8"))
+    assert target.read_text(encoding="utf-8") == "ok"
+    assert [p.name for p in tmp_path.iterdir()] == ["x.pt"]
+    with pytest.raises(OSError):
+        Fe._write_atomic(tmp_path / "y.pt", lambda f: (_ for _ in ()).throw(OSError("disque")))
+    assert [p.name for p in tmp_path.iterdir()] == ["x.pt"]  # rien de partiel
+
+
 def test_extract_matches_backbone_outputs_in_order(pyramid):
     task = get_task("synthetic_cls")
     ds = torch.utils.data.Subset(task.dataset("val"), range(10))

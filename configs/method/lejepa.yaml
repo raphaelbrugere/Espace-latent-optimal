@@ -1,6 +1,6 @@
 # LeJEPA : lambda*SIGReg + (1-lambda)*invariance sur les projections des V vues.
 # Valeurs de la baseline (exemple minimal LeJEPA), sauf la precision.
-# Tout ce qui change le resultat est ici, jamais dans cluster/.
+# Tout ce qui change le resultat est ici, jamais dans env/.
 name: lejepa
 
 model: # latentopt.methods.LeJEPA ; backbone fourni a l'execution
@@ -17,8 +17,8 @@ batch_size: 128 # batch global, en images (x num_views passes dans le backbone)
 max_steps_per_epoch: null # entier pour raccourcir une epoch (smoke run)
 warmup_epochs: 1
 
-# fp16 par defaut : un job peut tomber sur une RTX 2080 Ti, sans bf16 materiel (docs/CLUSTER.md).
-# bf16 (celle de la baseline) seulement sur un noeud sh : gpu_prod_long ou -C sh. fp32 en CPU.
+# fp16 par defaut : marche sur tout GPU. bf16 (celle de la baseline) exige un GPU Ampere ou plus
+# recent : refuse au demarrage sinon (run.py). fp32 en CPU.
 precision: fp16 # fp16 | bf16 | fp32
 
 optimizer: # latentopt.methods.build_optimizer ; modele et nombre de steps fournis a l'execution

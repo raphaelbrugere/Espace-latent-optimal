@@ -28,18 +28,18 @@ log = logging.getLogger("eval")
 
 @hydra.main(version_base="1.3", config_path=CONFIGS_DIR, config_name="eval")
 def main(cfg: DictConfig) -> None:
-    os.environ["DATA_ROOT"] = cfg.cluster.data_root
-    os.environ["OUTPUT_ROOT"] = cfg.cluster.results_root  # designes par nom (hub.locate)
+    os.environ["DATA_ROOT"] = cfg.env.data_root
+    os.environ["OUTPUT_ROOT"] = cfg.env.results_root  # designes par nom (hub.locate)
     run.prepare(cfg, Path(HydraConfig.get().runtime.output_dir))
-    run.lightning_settings(cfg.cluster.device, cfg.precision)  # verifie fp16 sur CPU
-    use_cuda = run.resolve_device(cfg.cluster.device) == "cuda"
+    run.lightning_settings(cfg.env.device, cfg.precision)  # verifie fp16 sur CPU
+    use_cuda = run.resolve_device(cfg.env.device) == "cuda"
     results = evaluate_downstream(
         list(cfg.downstream),
         split=cfg.split,
         device=torch.device("cuda" if use_cuda else "cpu"),
         precision=cfg.precision,
         cache_features=cfg.cache_features,
-        num_workers=cfg.cluster.num_workers,
+        num_workers=cfg.env.num_workers,
         batch_size=cfg.batch_size,
     )
     for trained, entry in results.items():

@@ -18,7 +18,8 @@ defaults:
   - backbone: ??? # obligatoire : from_run, vit_s8_dino...
   - neck: null # null : neck par defaut de la tache (configs/neck/)
   - head: null # null : tete par defaut de la tache (configs/head/)
-  - cluster: local
+  - env: local # local | ci | dce (configs/env/) : la machine, sans effet sur le resultat
+  - launcher: null # null | long | short (slurm/launcher/) : job Slurm, avec -m ; choisit env=dce
   - _self_
   - optional experiment: null
 
@@ -58,8 +59,12 @@ trainer:
   log_every_n_steps: 50
 
 hydra:
+  # profils Slurm (launcher=long|short) : dans slurm/launcher/, hors de configs/. Seule la
+  # config de premier niveau peut etendre le chemin de recherche de Hydra.
+  searchpath:
+    - file://${project_root:}/slurm
   run: # meme nom qu'en sweep (voir pretrain.yaml)
     dir: ${hydra.sweep.dir}/${hydra.sweep.subdir}
   sweep:
-    dir: ${cluster.results_root}
+    dir: ${env.results_root}
     subdir: ${train_dir:${hydra.runtime.choices.backbone},${oc.select:backbone.run,""},${backbone_run},${backbone_data},${backbone_method},${task},${hydra.runtime.choices.neck},${hydra.runtime.choices.head},${neck_from},${oc.select:hydra.job.num,""}}

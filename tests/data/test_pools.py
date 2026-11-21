@@ -72,7 +72,7 @@ def test_pretraining_without_probe_has_no_validation():
     cfg = compose_pretrain([
         "backbone=vit_s8", "backbone.arch=vit_tiny_patch16_224", "backbone.embed_dim=24",
         "backbone.blocks=[0,1]", "data=synthetic", "data.img_size=32", "data.probe_task=null",
-        "data.num_probe_classes=null", "cluster=ci",
+        "data.num_probe_classes=null", "env=ci",
     ])  # fmt: skip
     module, train, val = build(cfg)
     assert val is None and module.model.probe is None

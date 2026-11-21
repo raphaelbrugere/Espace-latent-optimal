@@ -4,7 +4,7 @@ defaults:
   - _base
   - _self_
 
-cluster:
+env:
   name: ci
   num_workers: 0
   device: cpu

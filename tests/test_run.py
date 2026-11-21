@@ -9,9 +9,9 @@ from latentopt import run
 from latentopt.models.contract import count_params, weights_hash
 
 
-def cfg(cluster="local", experiment="exp", allow_dirty=False):
+def cfg(env="local", experiment="exp", allow_dirty=False):
     return OmegaConf.create(
-        {"cluster": {"name": cluster}, "experiment_name": experiment, "allow_dirty": allow_dirty}
+        {"env": {"name": env}, "experiment_name": experiment, "allow_dirty": allow_dirty}
     )
 
 
@@ -27,7 +27,7 @@ def test_local_runs_are_always_allowed():
 
 def test_dce_outside_slurm_is_refused(monkeypatch):
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
-    with pytest.raises(RuntimeError, match="hors d'un job Slurm"):
+    with pytest.raises(RuntimeError, match="hors d'un job Slurm.*launcher=long"):
         run.check_launch(cfg("dce"), CLEAN)
 
 
@@ -109,6 +109,20 @@ def test_fp16_on_cpu_is_refused(gpu_broken):
         run.lightning_settings("auto", "fp16")
 
 
+def test_bf16_needs_an_ampere_gpu(gpu_ok, monkeypatch):
+    monkeypatch.setattr("torch.cuda.get_device_name", lambda i: "NVIDIA GeForce RTX 2080 Ti")
+    monkeypatch.setattr("torch.cuda.get_device_capability", lambda i: (7, 5))
+    with pytest.raises(RuntimeError, match="RTX 2080 Ti .sm_75. sans bf16 materiel"):
+        run.lightning_settings("cuda", "bf16")
+    monkeypatch.setattr("torch.cuda.get_device_capability", lambda i: (8, 6))  # RTX 3080/3090
+    assert run.lightning_settings("cuda", "bf16")["precision"] == "bf16-mixed"
+
+
+def test_bf16_on_cpu_does_not_query_the_gpu(gpu_broken, monkeypatch):
+    monkeypatch.setattr(run, "bf16_problem", lambda: pytest.fail("GPU interroge"))
+    assert run.lightning_settings("cpu", "bf16")["accelerator"] == "cpu"
+
+
 # --- resolve_device ----------------------------------------------------------------------
 
 
@@ -175,6 +189,25 @@ def test_unknown_compile_mode_fails():
         run.resolve_compile("yes", "gpu")
 
 
+# --- resolve_grad_checkpointing ----------------------------------------------------------
+
+
+# RTX 3080, RTX 5080, RTX 3090
+@pytest.mark.parametrize("gb,expected", [(10.7, True), (17.1, True), (25.4, False)])
+def test_grad_checkpointing_auto_follows_gpu_memory(monkeypatch, gb, expected):
+    monkeypatch.setattr(run, "gpu_memory_gb", lambda: gb)
+    assert run.resolve_grad_checkpointing("auto", "gpu") is expected
+
+
+def test_grad_checkpointing_explicit_or_on_cpu_ignores_the_gpu(monkeypatch):
+    monkeypatch.setattr(run, "gpu_memory_gb", lambda: pytest.fail("GPU interroge"))
+    assert run.resolve_grad_checkpointing("auto", "cpu") is False
+    assert run.resolve_grad_checkpointing(True, "gpu") is True
+    assert run.resolve_grad_checkpointing(False, "gpu") is False
+    with pytest.raises(ValueError):
+        run.resolve_grad_checkpointing("yes", "gpu")
+
+
 # --- git_info / prepare / save_backbone ---------------------------------------------------
 
 
@@ -188,7 +221,7 @@ def test_git_info_structure():
 def test_prepare_writes_resolved_config_and_git(tmp_path, monkeypatch):
     monkeypatch.setattr(run, "git_info", lambda: DIRTY)
     c = OmegaConf.create(
-        {"cluster": {"name": "local"}, "experiment_name": "e", "allow_dirty": False,
+        {"env": {"name": "local"}, "experiment_name": "e", "allow_dirty": False,
          "a": 2, "b": "${a}"}
     )  # fmt: skip
     git = run.prepare(c, tmp_path / "r")
@@ -240,7 +273,7 @@ def test_save_backbone_records_hash_and_results(tmp_path, pyramid):
 def mlflow_cfg(tmp_path, enabled=True):
     return OmegaConf.create(
         {
-            "cluster": {
+            "env": {
                 "name": "local",
                 "results_root": (tmp_path / "results").as_posix(),
                 "mlflow": enabled,

@@ -1,6 +1,15 @@
-# Cluster DCE
+# DCE et Slurm
 
 Data Center d'Enseignement de CentraleSupélec : cluster Slurm avec nœuds CPU et GPU.
+
+Ce dossier contient tout ce qui est propre au DCE et à Slurm, et rien d'autre :
+- ce mode d'emploi (compte, partitions, nœuds, pièges) ;
+- [`launcher/`](launcher/) : les profils de job (`long`, `short`), lus par Hydra et submitit.
+
+Règle du dépôt : ce qui change le résultat d'un run est dans `configs/` (hors `env/`) ; la
+machine (chemins, workers, device) est dans `configs/env/` ; les ressources demandées à Slurm
+(partition, durée, nœuds) sont ici. Aucun nom de partition ni de nœud dans `configs/` ni dans
+`src/` : `tests/test_configs.py` le vérifie.
 Tout se fait à la main, dans l'ordre ci-dessous. `<login>` est l'identifiant reçu par mail.
 
 - Documentation officielle : https://dce.pages.centralesupelec.fr/
@@ -125,7 +134,7 @@ Après `srun`, attendre que l'invite passe de `@chome` au nom du nœud avant de 
 | Se connecter | sa machine | `ssh dce` |
 | Mettre à jour le code | passerelle | `git pull && uv sync` |
 | Session interactive GPU | passerelle | `srun -p gpu_inter -t 00:30:00 --pty bash` |
-| Soumettre un job | passerelle | `uv run lo pretrain experiment=<nom> cluster=dce -m` (voir [slurm/COMMANDS.md](../slurm/COMMANDS.md)) |
+| Soumettre un job | passerelle, dans `tmux` | `uv run lo pretrain experiment=<nom> launcher=long -m` (voir [Lancer un job](#lancer-un-job)) |
 | Voir ses jobs | passerelle | `squeue -u <login>` |
 | Annuler un job | passerelle | `scancel <job_id>` |
 | Récupérer des résultats | sa machine | `scp -r dce:~/Espace-latent-optimal/results/<run> .` (ou `lo hub push` puis `lo hub pull`) |
@@ -134,6 +143,88 @@ Rappels (voir aussi [CONTRIBUTING.md](../CONTRIBUTING.md)) :
 
 - Toujours faire un smoke test avant un job long.
 - Ne jamais lancer de job long avec un arbre git non commité.
+
+## Lancer un job
+
+Un job Slurm se lance avec un profil de [`launcher/`](launcher/) et **`-m`** :
+
+| Profil | Partition | Durée max | Nœuds | Pour |
+|---|---|---|---|---|
+| `launcher=long` | `gpu_prod_long` | 2 jours | RTX 3090 ou 3080 (GTX 1080 Ti exclues) : bf16 possible | pré-entraînements, têtes |
+| `launcher=short` | `gpu_inter` | 30 min (2 h max) | tous sauf GTX 1080 Ti, dont des RTX 2080 Ti : pas de bf16 | smoke runs |
+
+```bash
+uv run lo pretrain experiment=vit_lejepa_imagenette launcher=long -m
+uv run lo pretrain experiment=smoke launcher=short method.precision=fp16 -m
+uv run lo pretrain experiment=smoke launcher=short hydra.launcher.timeout_min=120 -m   # autre durée
+```
+
+- **Le profil choisit `env=dce`** : inutile de l'écrire. Dans une session `srun`, on est déjà sur
+  un nœud : `env=dce` seul, sans profil ni `-m`.
+- **Le terminal reste bloqué jusqu'à la fin des jobs** (submitit attend leurs résultats). Lancer
+  la commande dans `tmux` (`tmux new -s lo`, puis `Ctrl-b d` pour se détacher, `tmux attach -t lo`
+  pour revenir), ou avec `nohup ... &`. Vérifier avec `squeue -u <login>` que les jobs tournent
+  bien, avant de fermer quoi que ce soit.
+- **Sorties brutes de Slurm** : `results/.submitit/<job_id>/` (stdout, stderr). Utiles quand le job
+  meurt avant d'écrire son `run.log` (limite de temps, mémoire, erreur de démarrage).
+- **Changer une ressource pour un job** : `hydra.launcher.<clé>=<valeur>`
+  (`timeout_min`, `mem_gb`, `exclude`, `partition`…). Un réglage qu'on change souvent mérite son
+  propre profil dans `launcher/`.
+
+### Balayages
+
+`-m` lance un job par combinaison des valeurs séparées par des virgules, en parallèle
+(`array_parallelism` : 4 à la fois avec `long`, la limite par utilisateur de `gpu_prod_long`).
+
+```bash
+# 3 valeurs de lamb x 3 graines = 9 jobs
+uv run lo pretrain experiment=vit_lejepa_imagenette method.model.lamb=0.01,0.02,0.05 seed=0,1,2 launcher=long -m
+
+# les 5 tâches d'un backbone, un job chacune
+uv run lo train backbone=from_run backbone.run=<run> \
+    task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det launcher=long -m
+```
+
+Une étude qu'on relance ou qu'on veut garder se décrit dans une expérience, avec
+`hydra.sweeper.params` : elle est versionnée avec le code, dans `configs/experiment/`, puisque
+c'est de la recette.
+
+```yaml
+# configs/experiment/lamb_x_seed.yaml
+# @package _global_
+defaults:
+  - vit_lejepa_imagenette
+hydra:
+  sweeper:
+    params:
+      method.model.lamb: 0.01,0.02,0.05
+      seed: 0,1,2
+```
+
+`uv run lo pretrain experiment=lamb_x_seed launcher=long -m` lance alors les 9 jobs.
+
+- **Coût** : 9 jobs de ~14 h font ~126 h GPU sur le fairshare commun (voir [Partitions](#partitions)).
+  Faire un smoke test d'abord.
+- **Noms** : les jobs d'un balayage partagent la date de soumission, suivie de `_1`, `_2`… Les
+  valeurs balayées ne sont pas dans le nom : les retrouver dans MLflow (config complète).
+- **Têtes en parallèle sur un même backbone** : sans risque, le cache de features est partagé
+  entre jobs simultanés (`evaluation/features.py`).
+
+### Durées mesurées
+
+| Run | Nœud | Réglages | Durée |
+|---|---|---|---|
+| baseline (`vit_lejepa_imagenette`) | `sh00` (RTX 3080) | `grad_checkpointing`, sans `compile` | ~1 min par epoch, ~13-14 h pour 800 epochs |
+
+### Pièges
+
+- **Ne pas demander de GPU à Slurm** (`--gres`, `--gpus-per-node`). Le DCE ne déclare pas de gres :
+  `sbatch` échoue avec « Invalid generic resource (gres) specification ». Le GPU vient avec le nœud
+  d'une partition `gpu_*` ; les profils mettent `gpus_per_node: null`.
+- **Sans `-m`**, Hydra n'utilise pas le launcher : `launcher=long` sans `-m` lance le run sur la
+  passerelle, et le garde-fou de `lo` l'arrête (« env=dce hors d'un job Slurm »).
+- **Le compte est partagé à trois** (fairshare commun). Chaque heure de GPU fait baisser la priorité
+  de toute l'équipe : smoke test d'abord, et compter les heures d'un balayage avant de le lancer.
 
 ## Stockage
 
@@ -188,14 +279,15 @@ GPU d'après la documentation officielle, partitions d'après le relevé. CPU : 
 
 Lors du relevé, `sh01`–`sh16` étaient en maintenance (`drain`) : seuls 6 nœuds servaient `gpu_prod_long`.
 
-Les GTX 1080 Ti (`sm_61`) ne sont sans doute plus prises en charge par les wheels PyTorch CUDA 13. À vérifier avec `torch.cuda.get_arch_list()` sur un `sh10`–`sh16` ; sinon, les exclure avec `--exclude=sh[10-16]`.
+Les GTX 1080 Ti (`sm_61`) ne sont sans doute plus prises en charge par les wheels PyTorch CUDA 13 (à vérifier avec `torch.cuda.get_arch_list()` sur un `sh10`–`sh16`). Les deux profils les excluent (`exclude: sh[10-16]`) ; si elles s'avèrent utilisables en fp16, l'exclusion peut être retirée de `short`.
 
 Choix de la précision :
-- **`16-mixed` (fp16) par défaut.** Un job peut tomber sur une 2080 Ti ou une 1080 Ti, qui n'ont pas de bf16 matériel.
-- **`bf16-mixed` possible** seulement si le job est sûr de tourner sur une Ampere ou une Blackwell (par exemple `-w` ou `--exclude` sur les autres nœuds).
-- **Mémoire** : prévoir 10 Go de mémoire GPU au plus (RTX 3080). `cluster=dce` active `grad_checkpointing` pour cette raison.
+- **`16-mixed` (fp16) par défaut** : marche sur tous les nœuds.
+- **`bf16-mixed`** exige une Ampere ou une Blackwell (capacité de calcul ≥ 8.0) : RTX 3090, 3080, 5080. Avec `launcher=long`, c'est garanti (3090 et 3080 seulement). Sur un autre GPU, `lo` s'arrête au démarrage, plutôt qu'un bf16 émulé des dizaines de fois plus lent.
 
-`torch.compile` : `cluster=dce` l'exige (`compile: true`). Il faut Triton (installé avec torch) et un compilateur C : `/usr/bin/gcc` est présent et `has_triton()` vrai (vérifié sur tx08 le 2026-11-21).
+Mémoire GPU : 24 Go sur une RTX 3090, 10 Go sur une RTX 3080, toutes deux servies par `gpu_prod_long`. Sans `grad_checkpointing`, la baseline demande ~22 Go (plus de 9,6 Go dès le premier pas sur `sh00`) ; avec, ~5-6 Go, pour ~25 % de temps en plus. `env=dce` met `grad_checkpointing: auto` : activé sur un GPU de moins de 20 Go (3080, 2080 Ti, 5080), désactivé au-delà (3090). Seuil calibré sur la baseline : un modèle ou un batch plus gros peut demander `env.grad_checkpointing=true`.
+
+`torch.compile` : `env=dce` l'exige (`compile: true`). Il faut Triton (installé avec torch) et un compilateur C : `/usr/bin/gcc` est présent et `has_triton()` vrai (vérifié sur tx08 le 2026-11-21).
 
 Chargement des données :
 - **`num_workers` à 6 au plus** : un nœud n'a que 8 cœurs.
@@ -220,7 +312,7 @@ D'après la documentation officielle (OS : Ubuntu 18.04 ou 20.04 ; disque local 
 
 ## À compléter
 
-- Variables d'environnement lues par le code : `DATA_ROOT` (défaut `<racine du dépôt>/data`), `FEATURES_ROOT` (défaut `DATA_ROOT/features`), `MODELS_ROOT` (défaut `DATA_ROOT/models`). `OUTPUT_ROOT` : `lo pretrain`, `lo train` et `lo eval` la fixent à `cluster.results_root`, et `latentopt.hub` y cherche (ou télécharge) les runs désignés par leur nom (défaut `<racine du dépôt>/results`). Pas encore utilisée : `ENV_ROOT`.
+- Variables d'environnement lues par le code : `DATA_ROOT` (défaut `<racine du dépôt>/data`), `FEATURES_ROOT` (défaut `DATA_ROOT/features`), `MODELS_ROOT` (défaut `DATA_ROOT/models`). `OUTPUT_ROOT` : `lo pretrain`, `lo train` et `lo eval` la fixent à `env.results_root`, et `latentopt.hub` y cherche (ou télécharge) les runs désignés par leur nom (défaut `<racine du dépôt>/results`). Pas encore utilisée : `ENV_ROOT`.
 
 ## Citation
 

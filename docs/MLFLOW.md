@@ -47,7 +47,7 @@ Suivre un run en cours, sans sync : `--backend-store-uri sqlite:///<dossier du r
 | Métriques | courbes `train/*`, `val/*` ; résultats finaux `results/*` |
 | Tags | `task`, `neck`, `head`, `downstream`, `backbone_run`, `git_commit`, `host`… |
 
-Le détail des tags : [slurm/COMMANDS.md](../slurm/COMMANDS.md), section 9.
+Le détail des tags : [COMMANDS.md](COMMANDS.md), section 9.
 
 ## Comparer
 
@@ -72,4 +72,4 @@ metrics.`results/score` > 0.5
 - Colonnes, graphiques et groupements choisis dans l'interface sont gardés **dans le navigateur** :
   ni partagés, ni conservés après une reconstruction de la base. Seuls filtre et tri passent dans l'URL.
 - L'interface ne joint pas deux runs : pas de tableau « une ligne par entraînement, val et test ».
-- `cluster.mlflow=false` désactive le suivi d'un run.
+- `env.mlflow=false` désactive le suivi d'un run.

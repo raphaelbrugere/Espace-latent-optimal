@@ -72,9 +72,9 @@ Espace-latent-optimal/
 │   ├── losses/                 # fonctions de perte : SIGReg, segmentation, détection
 │   └── evaluation/             # registre des tâches, métriques, cache de features, évaluation
 │
-├── configs/                    # configs Hydra
+├── configs/                    # configs Hydra : ce que calcule un run, et sur quelle machine
 │   ├── pretrain.yaml, train.yaml, eval.yaml   # un fichier de premier niveau par commande Hydra
-│   ├── cluster/                # local, ci, dce : seul dossier qui change entre CI, local et DCE
+│   ├── env/                    # local, ci, dce : la machine (chemins, workers, device), sans effet sur le résultat
 │   ├── data/                   # pool de pré-entraînement : imagenette (protocole), flowers102, galaxy10, oxford_pets, synthetic
 │   ├── backbone/               # vit_s8, vit_s8_dino, from_run
 │   ├── neck/                   # necks : embed_norm, fpn, conv_trunk et leurs hyperparamètres
@@ -82,7 +82,9 @@ Espace-latent-optimal/
 │   ├── method/                 # lejepa
 │   └── experiment/             # une config complète par expérience, dont smoke et smoke_train
 │
-├── slurm/                      # COMMANDS.md : toutes les commandes (local, smoke, DCE) ; jobs hors submitit
+├── slurm/                      # tout ce qui est propre au DCE et à Slurm, et rien d'autre
+│   ├── README.md               # compte, partitions, nœuds, lancer un job, balayages, pièges
+│   └── launcher/               # profils de job Slurm (long, short) : launcher=long -m
 ├── bench/                      # latence, mémoire, énergie sur la cible embarquée
 ├── projects/                   # exploration libre, hors du code principal
 │
@@ -99,9 +101,9 @@ Espace-latent-optimal/
 │   └── evaluation/             # tâches, métriques, cache de features
 │
 ├── docs/                       # documentation
+│   ├── COMMANDS.md             # toutes les commandes (local, smoke, DCE), avec variantes et pièges
 │   ├── CONFIGS.md              # les groupes de configs Hydra et leurs clés
 │   ├── DATASETS.md             # source, licence, checksum, taille, split de chaque dataset
-│   ├── CLUSTER.md              # mode d'emploi du DCE : quotas, partitions, Internet
 │   ├── HUB.md                  # noms des runs, organisation Hugging Face, publication
 │   └── MLFLOW.md               # comparer les runs : base d'équipe, interface, filtres
 │
@@ -135,11 +137,11 @@ uv run lo train experiment=smoke_train task=synthetic_cls,synthetic_seg,syntheti
 uv run lo data prepare
 
 # pré-entraînement, têtes, évaluation
-uv run lo pretrain experiment=vit_lejepa_imagenette cluster=dce -m
+uv run lo pretrain experiment=vit_lejepa_imagenette launcher=long -m
 uv run lo train backbone=from_run backbone.run=<run> \
-    task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det cluster=dce -m
+    task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det launcher=long -m
 # une tête de plus sur un neck déjà entraîné (gelé)
-uv run lo train backbone=from_run backbone.run=<run> task=pets_det neck_from=pets_seg-fpn-conv_seg-<date> cluster=dce -m
+uv run lo train backbone=from_run backbone.run=<run> task=pets_det neck_from=pets_seg-fpn-conv_seg-<date> launcher=long -m
 uv run lo eval downstream='[<run>/downstream/imagenette_cls-embed_norm-linear-<date>,...]'
 
 # publication sur Hugging Face (un dépôt privé par backbone, avec ses entraînements et évaluations)
@@ -151,8 +153,8 @@ uv run lo mlflow sync
 uv run mlflow ui --backend-store-uri sqlite:///data/mlflow.db   # http://localhost:5000
 ```
 
-Toutes les commandes, avec leurs variantes et pièges : [slurm/COMMANDS.md](slurm/COMMANDS.md).
-Le DCE : [docs/CLUSTER.md](docs/CLUSTER.md). Les données : [docs/DATASETS.md](docs/DATASETS.md).
+Toutes les commandes, avec leurs variantes et pièges : [docs/COMMANDS.md](docs/COMMANDS.md).
+Le DCE et Slurm : [slurm/README.md](slurm/README.md). Les données : [docs/DATASETS.md](docs/DATASETS.md).
 Noms des runs et Hugging Face : [docs/HUB.md](docs/HUB.md). Les configs : [docs/CONFIGS.md](docs/CONFIGS.md).
 
 ## Réglages VS Code (`.vscode/`)
