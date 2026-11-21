@@ -209,13 +209,18 @@ Choisir un autre port si 5000 est pris (la passerelle est partagée). Suivre un 
 scp -r dce:~/Espace-latent-optimal/results/<run> .   # ou lo hub push <run> sur le DCE, puis lo hub pull <run>
 ```
 
-## 11. Repartir de zéro (sur la passerelle)
+## 11. Vider les fichiers générés (repartir de zéro)
 
 ```bash
-rm -rf data/datasets/* data/features/* data/models/* results/*   # irréversible : récupérer les résultats avant
+uv run lo clear --target features mlflow   # une partie : results datasets features models mlflow cache
+uv run lo clear --all                      # tout ; irréversible : récupérer les résultats avant
+uv run lo clear --help
 ```
 
-Les fichiers cachés (`.gitkeep`) sont conservés. Il faut ensuite relancer la section 2.
+Seuls les fichiers non suivis par git sont supprimés (les `.gitkeep` de `data/` restent). La liste
+et la taille de ce qui va être supprimé sont affichées, puis une confirmation `y/n` est toujours
+demandée. Les emplacements suivent `DATA_ROOT`, `OUTPUT_ROOT`, `FEATURES_ROOT` et `MODELS_ROOT`.
+Après `datasets` ou `models`, relancer la section 2.
 
 ## Pièges
 

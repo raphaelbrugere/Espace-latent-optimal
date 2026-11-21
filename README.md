@@ -48,7 +48,7 @@ Espace-latent-optimal/
 ├── src/latentopt/              # bibliothèque, identique en local et sur Slurm
 │   ├── cli/                    # commande `lo` : un module par commande, groupés par famille
 │   │   ├── run/                # lo pretrain, lo train, lo eval (Hydra)
-│   │   ├── data/               # lo data prepare
+│   │   ├── data/               # lo data prepare, lo clear
 │   │   └── store/              # lo hub push|pull, lo mlflow sync
 │   ├── config.py               # resolvers Hydra (${project_root:}, noms des dossiers de run)
 │   ├── hub.py                  # dossier d'un backbone (backbone/, downstream/) et son dépôt Hugging Face (docs/HUB.md)

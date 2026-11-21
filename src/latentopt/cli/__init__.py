@@ -20,6 +20,7 @@ COMMANDS = {
         ("train", "run.train", "main", "run", "entraine une tete sur un backbone gele (Hydra)"),
         ("eval", "run.eval", "main", "run", "evalue un backbone et ses tetes (Hydra)"),
         ("data prepare", "data.prepare", "main", "data", "telecharge datasets et poids externes"),
+        ("clear", "data.clear", "main", "data", "vide les fichiers generes (apres confirmation)"),
         ("hub push", "store.hub", "push", "store", "publie un run sur Hugging Face"),
         ("hub pull", "store.hub", "pull", "store", "telecharge un run depuis Hugging Face"),
         ("mlflow sync", "store.mlflow_sync", "main", "store", "regroupe les runs MLflow"),
