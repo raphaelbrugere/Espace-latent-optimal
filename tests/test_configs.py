@@ -61,7 +61,8 @@ def test_eval_composes():
 
 
 ENV_KEYS = {
-    "name", "data_root", "results_root", "mlflow", "num_workers", "device", "progress_bar"
+    "name", "data_root", "results_root", "mlflow", "num_workers", "device", "progress_bar",
+    "grad_checkpointing", "compile",  # resultat identique au bruit numerique pres (docs/CONFIGS.md)
 }  # fmt: skip
 
 

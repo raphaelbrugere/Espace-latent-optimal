@@ -46,6 +46,8 @@ def build(cfg: DictConfig) -> tuple[LeJEPAModule, DataLoader, DataLoader | None]
         drop_last=True,
         num_workers=workers,
         persistent_workers=workers > 0,
+        # copie vers le GPU asynchrone ; ~100 Mo par pas, seul DataLoader ou cela compte
+        pin_memory=run.resolve_device(cfg.cluster.device) == "cuda",
     )
     # val de la sonde en ligne ; probe_task null (pool sans tache de classification) : pas de
     # sonde, donc pas de validation. Non persistant, a garder : recreer ses workers a
@@ -75,6 +77,10 @@ def main(cfg: DictConfig) -> None:
     L.seed_everything(cfg.seed, workers=False)
 
     module, train, val = build(cfg)
+    compiled = run.resolve_compile(cfg.cluster.compile, settings["accelerator"])
+    if compiled:
+        os.environ.setdefault("TRITON_DEFAULT_FP_FUSION", "1")  # defaut actuel, sans avertissement
+        module.model.backbone.compile()  # en place : state_dict inchange (backbone.pt, last.ckpt)
     trainer = L.Trainer(
         max_epochs=cfg.method.epochs,
         limit_train_batches=cfg.method.max_steps_per_epoch,
@@ -90,7 +96,10 @@ def main(cfg: DictConfig) -> None:
         devices=1,
         **settings,
     )
-    log.info("Trainer %s | %d images de pre-entrainement", settings, len(train.dataset))
+    log.info(
+        "Trainer %s | compile %s | %d images de pre-entrainement",
+        settings, compiled, len(train.dataset),
+    )  # fmt: skip
 
     t0 = time.time()
     trainer.fit(module, train, val, ckpt_path=cfg.resume)
@@ -104,6 +113,7 @@ def main(cfg: DictConfig) -> None:
         epochs=trainer.current_epoch,
         steps=trainer.global_step,
         precision=settings["precision"],
+        compiled=compiled,
         gpu_hours=round(hours, 3)
         if trainer.accelerator.__class__.__name__ == "CUDAAccelerator"
         else 0.0,

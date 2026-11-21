@@ -6,17 +6,13 @@
 #   lo pretrain experiment=vit_lejepa_imagenette cluster=dce -m
 #
 # bf16 : gpu_prod_long ne sert que des noeuds sh (RTX 3080, bf16 materiel), voir docs/CLUSTER.md.
-# grad_checkpointing : sans lui, manque de memoire des le premier pas sur une RTX 3080
-# (batch 128 x 4 vues, > 9,6 Go) ; avec, ~6,1 Go (mesure sur sh00). Meme resultat, plus lent.
-# Duree mesuree sur sh00 : ~1 min par epoch, soit ~13-14 h pour les 800 epochs.
+# Duree mesuree sur sh00 (grad_checkpointing, sans compile) : ~1 min par epoch, soit ~13-14 h pour
+# les 800 epochs.
 defaults:
   - override /backbone: vit_s8
   - override /data: imagenette
 
 experiment_name: vit_lejepa_imagenette
-
-backbone:
-  grad_checkpointing: true
 
 method:
   precision: bf16

@@ -138,7 +138,8 @@ def build_optimizer(
         groups.append(
             {"params": model.probe.parameters(), "lr": probe_lr, "weight_decay": probe_weight_decay}
         )
-    opt = torch.optim.AdamW(groups)
+    # fused : toute la mise a jour en un seul noyau (meme formule, moins de passes en memoire)
+    opt = torch.optim.AdamW(groups, fused=True)
     sched = torch.optim.lr_scheduler.SequentialLR(
         opt,
         [

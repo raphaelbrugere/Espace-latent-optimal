@@ -60,9 +60,9 @@ uv run lo pretrain experiment=vit_lejepa_imagenette method.model.lamb=0.05 clust
 # balayer plusieurs valeurs : un job par valeur
 uv run lo pretrain experiment=vit_lejepa_imagenette method.model.lamb=0.01,0.02,0.05 cluster=dce -m
 
-# manque de mémoire GPU : backbone.grad_checkpointing=true (même résultat, plus lent).
-# Déjà activé dans vit_lejepa_imagenette : sans lui, OOM sur une RTX 3080 (10 Go).
-uv run lo pretrain experiment=<autre> backbone.grad_checkpointing=true cluster=dce -m
+# grad_checkpointing : activé par défaut avec cluster=dce (sans lui, OOM sur une RTX 3080).
+# Sur une 3090 (24 Go), le désactiver va ~25 % plus vite, même résultat :
+uv run lo pretrain experiment=vit_lejepa_imagenette cluster.grad_checkpointing=false cluster=dce -m
 
 # reprendre un run interrompu
 uv run lo pretrain experiment=vit_lejepa_imagenette resume=results/<run>/backbone/checkpoints/last.ckpt cluster=dce -m

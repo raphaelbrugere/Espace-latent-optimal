@@ -53,6 +53,7 @@ from latentopt.models.contract import count_params, weights_hash
 log = logging.getLogger(__name__)
 
 DEVICES = ("auto", "cpu", "cuda")  # cluster.device
+COMPILE_MODES = ("auto", True, False)  # cluster.compile (auto, true, false en YAML)
 ACCELERATORS = {"cpu": "cpu", "cuda": "gpu"}  # device resolu -> accelerator de Lightning
 PRECISIONS = {"fp32": "32-true", "fp16": "16-mixed", "bf16": "bf16-mixed"}
 
@@ -171,6 +172,43 @@ def resolve_device(device: str) -> str:
     return "cpu"
 
 
+def resolve_compile(mode: bool | str, accelerator: str) -> bool:
+    """cluster.compile (auto, true, false) -> compiler le backbone ou non (`lo pretrain`).
+
+    torch.compile genere ses noyaux GPU avec Triton (installe par uv sync, INSTALL.md), qui
+    demande un GPU pris en charge et un compilateur C. auto : compile si le run est sur GPU et
+    que Triton y est utilisable, sinon eager. true : erreur dans ce cas, plutot qu'un job long
+    plus lent sans le savoir.
+    """
+    if mode not in COMPILE_MODES:
+        raise ValueError(f"cluster.compile : auto, true ou false, recu {mode!r}")
+    if mode is False:
+        return False
+    problem = compile_problem(accelerator)
+    if problem is None:
+        return True
+    if mode is True:
+        raise RuntimeError(f"compile=true, mais torch.compile est inutilisable : {problem}")
+    if accelerator == "gpu":  # sur CPU, l'eager va de soi : rien a signaler
+        log.warning("compile=auto : backbone non compile, %s", problem)
+    return False
+
+
+def compile_problem(accelerator: str) -> str | None:
+    """None si torch.compile peut generer ses noyaux GPU, sinon la raison."""
+    if accelerator != "gpu":
+        return "run sur CPU"
+    from torch.utils._triton import has_triton
+
+    if not has_triton():
+        return "Triton absent ou GPU non pris en charge"
+    # Triton compile ses lanceurs en C au premier usage (triton-windows embarque son compilateur)
+    has_cc = os.environ.get("CC") or shutil.which("gcc") or shutil.which("clang")
+    if sys.platform != "win32" and not has_cc:
+        return "aucun compilateur C pour Triton (gcc, clang ou variable CC)"
+    return None
+
+
 @cache
 def cuda_problem() -> str | None:
     """None si torch calcule sur le GPU 0, sinon la raison : pas de GPU, pilote trop ancien
@@ -189,9 +227,19 @@ def cuda_problem() -> str | None:
     return None
 
 
+def quiet_libraries() -> None:
+    """Messages d'information de Lightning et MLflow masques : GPU detecte, graine, resume du
+    modele, creation de la base MLflow... redisent la config ou nos propres lignes. Leurs
+    avertissements et erreurs restent affiches."""
+    os.environ.setdefault("MLFLOW_LOGGING_LEVEL", "WARNING")  # si mlflow est importe apres
+    for name in ("lightning.pytorch", "lightning.fabric", "mlflow"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def prepare(cfg: DictConfig, run_dir: Path) -> dict[str, Any]:
     """Verifie le lancement, ecrit config.yaml (resolue), git.txt et lineage.json.
     Renvoie l'etat git, avec la lignee sous la cle `lineage`."""
+    quiet_libraries()
     git = git_info()
     check_launch(cfg, git)
     run_dir.mkdir(parents=True, exist_ok=True)

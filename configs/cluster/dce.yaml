@@ -14,6 +14,12 @@ cluster:
   num_workers: 6 # 8 coeurs par noeud : en laisser pour le processus principal
   device: cuda
   progress_bar: false # la barre de progression pollue les logs Slurm ; suivre run.log
+  # sans lui, la baseline (batch 128 x 4 vues) manque de memoire des le premier pas sur une
+  # RTX 3080 (> 9,6 Go) ; avec, ~6,1 Go (mesure sur sh00). false sur une 3090 : plus rapide.
+  grad_checkpointing: true
+  # tous les runs du DCE compiles ; sinon arret au demarrage plutot qu'un job plus lent en eager.
+  # gcc et Triton verifies sur tx08 le 2026-11-21.
+  compile: true
 
 hydra:
   launcher:

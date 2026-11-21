@@ -135,6 +135,46 @@ def test_unknown_device_or_precision_fails(bad):
         run.lightning_settings(*bad)
 
 
+# --- resolve_compile ---------------------------------------------------------------------
+
+
+def test_compile_auto_follows_triton_on_gpu(monkeypatch):
+    monkeypatch.setattr("torch.utils._triton.has_triton", lambda: True)
+    assert run.resolve_compile("auto", "gpu") is True
+    monkeypatch.setattr("torch.utils._triton.has_triton", lambda: False)
+    assert run.resolve_compile("auto", "gpu") is False
+
+
+def test_compile_auto_is_eager_on_cpu_and_false_never_compiles():
+    assert run.resolve_compile("auto", "cpu") is False
+    assert run.resolve_compile(False, "gpu") is False
+
+
+def test_compile_true_without_triton_is_refused(monkeypatch):
+    monkeypatch.setattr("torch.utils._triton.has_triton", lambda: False)
+    with pytest.raises(RuntimeError, match="Triton"):
+        run.resolve_compile(True, "gpu")
+    with pytest.raises(RuntimeError, match="CPU"):
+        run.resolve_compile(True, "cpu")
+
+
+def test_compile_needs_a_c_compiler_outside_windows(monkeypatch):
+    monkeypatch.setattr("torch.utils._triton.has_triton", lambda: True)
+    monkeypatch.setattr(run.sys, "platform", "linux")
+    monkeypatch.setattr(run.shutil, "which", lambda name: None)
+    monkeypatch.delenv("CC", raising=False)
+    assert run.resolve_compile("auto", "gpu") is False
+    with pytest.raises(RuntimeError, match="compilateur C"):
+        run.resolve_compile(True, "gpu")
+    monkeypatch.setenv("CC", "/opt/cc")
+    assert run.resolve_compile(True, "gpu") is True
+
+
+def test_unknown_compile_mode_fails():
+    with pytest.raises(ValueError):
+        run.resolve_compile("yes", "gpu")
+
+
 # --- git_info / prepare / save_backbone ---------------------------------------------------
 
 

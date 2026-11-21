@@ -59,6 +59,7 @@ Deux versions sont écrites à deux endroits, à garder identiques à la main :
 
 - **ruff** : dans `uv.lock` (`uv run ruff`, et l'extension VS Code grâce à `"ruff.importStrategy": "fromEnvironment"` dans `.vscode/settings.json` ; sans ce réglage, elle utiliserait sa propre copie) et dans `.pre-commit-config.yaml` (hooks, CI). Si elles divergent, le formatage de l'éditeur et celui de la CI peuvent différer. Pour changer : `uv add --dev "ruff==<version>"` et le `rev` du hook `ruff-pre-commit`.
 - **uv** : dans `pyproject.toml` et dans les commandes d'installation de ce fichier (étape 1) et de `docs/CLUSTER.md` (étape 4).
+- **Triton** : sous Linux, `triton` est une dépendance de torch (version dans `uv.lock`) ; sous Windows, `triton-windows` est déclaré dans `pyproject.toml`. Quand torch change, aligner la fourchette de `triton-windows` sur la majeure.mineure de `triton` dans `uv.lock`, puis `uv lock`.
 
 ## Ce que font les extensions VS Code
 
@@ -113,6 +114,13 @@ Pour vérifier sans lancer de run :
 
 ```bash
 uv run python -c "from latentopt.run import cuda_problem; print(cuda_problem() or 'GPU OK')"
+```
+
+Triton, le compilateur de `torch.compile`, est installé par `uv sync` sur toutes les machines : celui de
+torch sous Linux, le portage `triton-windows` sous Windows. Pour vérifier qu'il est utilisable sur ce GPU :
+
+```bash
+uv run python -c "from torch.utils._triton import has_triton; print(has_triton())"
 ```
 
 Un smoke run (`uv run lo pretrain experiment=smoke`) vérifie le reste de l'installation.

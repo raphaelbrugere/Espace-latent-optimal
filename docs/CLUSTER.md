@@ -193,7 +193,9 @@ Les GTX 1080 Ti (`sm_61`) ne sont sans doute plus prises en charge par les wheel
 Choix de la précision :
 - **`16-mixed` (fp16) par défaut.** Un job peut tomber sur une 2080 Ti ou une 1080 Ti, qui n'ont pas de bf16 matériel.
 - **`bf16-mixed` possible** seulement si le job est sûr de tourner sur une Ampere ou une Blackwell (par exemple `-w` ou `--exclude` sur les autres nœuds).
-- **Mémoire** : prévoir 10 Go de mémoire GPU au plus (RTX 3080).
+- **Mémoire** : prévoir 10 Go de mémoire GPU au plus (RTX 3080). `cluster=dce` active `grad_checkpointing` pour cette raison.
+
+`torch.compile` : `cluster=dce` l'exige (`compile: true`). Il faut Triton (installé avec torch) et un compilateur C : `/usr/bin/gcc` est présent et `has_triton()` vrai (vérifié sur tx08 le 2026-11-21).
 
 Chargement des données :
 - **`num_workers` à 6 au plus** : un nœud n'a que 8 cœurs.

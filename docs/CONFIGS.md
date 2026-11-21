@@ -30,13 +30,13 @@ img_size: ${oc.select:data.img_size,128} # celle du pool en pré-entraînement, 
 embed_dim: 512 # projection après le pooling ; null = token CLS
 blocks: [2, 5, 8, 11] # blocs exposés comme cartes de features
 drop_path_rate: 0.1
-grad_checkpointing: false # moins de mémoire, plus lent, même résultat
+grad_checkpointing: ${oc.select:cluster.grad_checkpointing,false} # réglé dans cluster/
 ```
 
 | Fichier | Rôle | Clés |
 |---|---|---|
 | `vit_s8.yaml` | ViT-S/8 à poids aléatoires, baseline | celles ci-dessus |
-| `vit_s8_dino.yaml` | ViT-S/8 aux poids DINO (référence externe) | `img_size`, `blocks`, `drop_path_rate`, `grad_checkpointing` |
+| `vit_s8_dino.yaml` | ViT-S/8 aux poids DINO (référence externe) | `img_size`, `blocks`, `drop_path_rate` ; `grad_checkpointing` lu dans `cluster/` |
 | `from_run.yaml` | backbone d'un de nos pré-entraînements | `run` : dossier du run, absolu ou relatif à la racine (obligatoire) |
 
 ## `method/` : la méthode de pré-entraînement
@@ -117,6 +117,8 @@ du neck et de la tête sont comptés séparément dans `results.json`.
 | `data_root`, `results_root` | emplacement des données et des résultats |
 | `mlflow` | base MLflow par run ; `false` = désactivé |
 | `num_workers`, `device`, `progress_bar` | DataLoader, matériel, affichage |
+| `grad_checkpointing` | recalcule les activations du backbone au backward : ~5x moins de mémoire GPU, ~25 % plus lent, même résultat. `false` par défaut, `true` sur `dce` (sans lui, OOM sur une RTX 3080) ; lu par les configs de `backbone/` |
+| `compile` | `torch.compile` du backbone dans `lo pretrain` : `auto` (défaut) s'il tourne sur GPU avec Triton et un compilateur C, `true` l'exige (erreur au démarrage sinon ; défaut de `dce`), `false` jamais. Au bruit numérique près, sans effet sur le résultat ; l'état réel est noté dans `results.json` (`compiled`) |
 | `hydra.launcher.*` (`dce.yaml`) | job Slurm : partition, durée, CPU, mémoire, contrainte de nœud |
 
 Fichiers : `local.yaml` (machine personnelle), `ci.yaml` (GitHub Actions, CPU), `dce.yaml` (cluster, avec `-m`).

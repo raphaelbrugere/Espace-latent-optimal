@@ -20,6 +20,9 @@ dependencies = [
     "timm>=1.0.31",
     "torch>=2.15",
     "torchvision>=0.29",
+    # Triton (torch.compile) : fourni par torch sous Linux, portage communautaire sous Windows.
+    # Meme majeure.mineure que le triton de torch dans uv.lock : a changer avec torch.
+    "triton-windows>=3.9,<3.10 ; sys_platform == 'win32'",
 ]
 
 [project.scripts]
