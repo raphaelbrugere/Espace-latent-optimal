@@ -101,7 +101,7 @@ def test_backbone_run_of_a_train_run(tmp_path):
     )
     assert hub.backbone_run("from_run", str(tmp_path / BB)) == BB
     assert hub.backbone_run("from_run", str(tmp_path / BB / "backbone")) == BB
-    assert hub.backbone_run("vit_s8_dino", "", BB) == BB
+    assert hub.backbone_run("vit_s8_dino", forced=BB) == BB
     with pytest.raises(ValueError):
         hub.backbone_run("vit_s8_dino", "", "pets_seg-conv_seg-20261117_090000")
 

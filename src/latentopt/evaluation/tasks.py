@@ -3,7 +3,7 @@
 Cinq taches de protocole (entree 128px, splits figes, transforms et metriques fixes, voir
 docs/DATASETS.md), plus trois taches synthetiques pour le smoke run (64px).
 
-`default_neck`, `default_head` et `epochs` forment la recette de la baseline : choix par
+`default_neck`, `default_head` et `epochs` forment le couple neck + tete de la baseline : choix par
 defaut, remplacables (`neck=...`, `head=...`, `epochs=...`), contrairement au protocole.
 """
 

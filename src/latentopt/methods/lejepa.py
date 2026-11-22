@@ -63,8 +63,8 @@ class MultiViewTransform:
 class LeJEPA(nn.Module):
     """Backbone + projecteur + SIGReg, et sonde en ligne optionnelle.
 
-    `backbone` respecte le contrat des tetes : `forward(x)["embed"]` de forme (B, D)
-    et un attribut `embed_dim` = D.
+    `backbone` respecte le contrat Backbone (models/contract.py) : `forward(x)["embed"]` de
+    forme (B, D) et un attribut `embed_dim` = D.
     """
 
     def __init__(
@@ -84,7 +84,7 @@ class LeJEPA(nn.Module):
         self.sigreg = sigreg if sigreg is not None else SIGReg()
         self.lamb = lamb
         dim = backbone.embed_dim
-        self.probe = (  # recette linear : LayerNorm sur embed puis projection
+        self.probe = (  # sonde : neck embed_norm (LayerNorm sur embed) puis tete linear
             Downstream(EmbedNorm(dim), LinearHead(dim, num_probe_classes))
             if num_probe_classes
             else None

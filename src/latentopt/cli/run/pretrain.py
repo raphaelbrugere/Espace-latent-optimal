@@ -1,6 +1,6 @@
 """Pre-entrainement d'un backbone (configs/pretrain.yaml).
 
-    lo pretrain experiment=smoke                     # smoke run, CPU, ~1 min
+    lo pretrain experiment=smoke                     # smoke run, CPU
     lo pretrain backbone=vit_s8                      # local
     lo pretrain experiment=<nom> launcher=long -m    # job Slurm (slurm/README.md)
 
@@ -34,7 +34,8 @@ log = logging.getLogger("pretrain")
 
 
 def build(cfg: DictConfig) -> tuple[LeJEPAModule, DataLoader, DataLoader | None]:
-    """Config -> module Lightning et DataLoaders, sans effet de bord (testable)."""
+    """Config -> module Lightning et DataLoaders ; aucun entrainement (le sondage du GPU de
+    run.resolve_device est mis en cache)."""
     m = cfg.method
     source = instantiate(cfg.data.source)
     views = MultiViewTransform(size=cfg.data.img_size, num_views=m.num_views)
@@ -69,6 +70,7 @@ def main(cfg: DictConfig) -> None:
     # la config fait foi pour l'emplacement des donnees (lu par latentopt.data.paths)
     os.environ["DATA_ROOT"] = cfg.env.data_root
     os.environ["OUTPUT_ROOT"] = cfg.env.results_root  # runs designes par leur nom (hub.locate)
+    ckpt = run.resume_checkpoint(cfg.resume)  # avant tout calcul : chemin faux = arret
     run_dir = Path(HydraConfig.get().runtime.output_dir)
     git = run.prepare(cfg, run_dir)
     settings = run.lightning_settings(cfg.env.device, cfg.method.precision)
@@ -107,7 +109,7 @@ def main(cfg: DictConfig) -> None:
     )  # fmt: skip
 
     t0 = time.time()
-    trainer.fit(module, train, val, ckpt_path=cfg.resume)
+    trainer.fit(module, train, val, ckpt_path=ckpt)
     hours = (time.time() - t0) / 3600
 
     final = {k: float(v) for k, v in trainer.callback_metrics.items()}
@@ -125,6 +127,7 @@ def main(cfg: DictConfig) -> None:
         final_metrics=final,
         git_commit=git["commit"],
         git_dirty=git["dirty"],
+        resumed_from=run.resumed_from(cfg, ckpt),
     )
     run.mlflow_finish(mlflow, payload)
 

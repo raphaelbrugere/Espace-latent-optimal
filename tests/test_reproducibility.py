@@ -77,21 +77,21 @@ def same_weights(a: torch.nn.Module, b: torch.nn.Module, atol: float = 0.0) -> b
 def test_head_training_is_reproducible(isolated_data, task):
     a = train_head(isolated_data, f"task={task}")
     b = train_head(isolated_data, f"task={task}")
-    assert same_weights(a.head, b.head)
+    assert same_weights(a.downstream, b.downstream)
     assert weights_hash(a.backbone) == weights_hash(b.backbone)
 
 
 def test_head_training_depends_on_seed(isolated_data):
     a = train_head(isolated_data, "seed=0")
     b = train_head(isolated_data, "seed=1")
-    assert not same_weights(a.head, b.head)
+    assert not same_weights(a.downstream, b.downstream)
 
 
 def test_feature_cache_gives_same_head_as_on_the_fly(isolated_data):
     """Le cache ne change pas l'entrainement : meme init, meme ordre, memes features."""
     cached = train_head(isolated_data, "cache_features=true")
     live = train_head(isolated_data, "cache_features=false")
-    assert same_weights(cached.head, live.head, atol=1e-5)
+    assert same_weights(cached.downstream, live.downstream, atol=1e-5)
 
 
 def test_backbone_seed_fixes_random_init(isolated_data):

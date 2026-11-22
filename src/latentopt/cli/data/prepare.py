@@ -116,8 +116,7 @@ def main(argv: list[str] | None = None) -> None:
                 module.download(root, force=args.force_download)
                 if args.verbose:
                     print(f"[{name}] telecharge en {time.perf_counter() - start:.0f} s", flush=True)
-            if hasattr(module, "freeze_splits"):
-                module.freeze_splits(root, force=args.force_splits)  # dit lui-meme ce qu'il fait
+            module.freeze_splits(root, force=args.force_splits)  # dit lui-meme ce qu'il fait
 
 
 if __name__ == "__main__":

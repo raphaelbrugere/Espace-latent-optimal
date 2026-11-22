@@ -1,1 +1,1 @@
-"""Preparation des donnees : lo data prepare."""
+"""Donnees et fichiers generes : lo data prepare (telechargement), lo clear (nettoyage)."""

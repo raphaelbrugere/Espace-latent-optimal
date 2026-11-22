@@ -17,8 +17,14 @@ COMMANDS = {
     tuple(words.split()): (f"latentopt.cli.{module}", func, family, desc)
     for words, module, func, family, desc in [
         ("pretrain", "run.pretrain", "main", "run", "pre-entraine un backbone (Hydra)"),
-        ("train", "run.train", "main", "run", "entraine une tete sur un backbone gele (Hydra)"),
-        ("eval", "run.eval", "main", "run", "evalue un backbone et ses tetes (Hydra)"),
+        (
+            "train",
+            "run.train",
+            "main",
+            "run",
+            "entraine un neck et une tete sur un backbone gele (Hydra)",
+        ),
+        ("eval", "run.eval", "main", "run", "evalue des entrainements downstream (Hydra)"),
         ("data prepare", "data.prepare", "main", "data", "telecharge datasets et poids externes"),
         ("clear", "data.clear", "main", "data", "vide les fichiers generes (apres confirmation)"),
         ("hub push", "store.hub", "push", "store", "publie un run sur Hugging Face"),

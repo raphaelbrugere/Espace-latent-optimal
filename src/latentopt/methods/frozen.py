@@ -25,7 +25,7 @@ from latentopt.models.contract import freeze
 
 
 class FrozenBackboneModule(L.LightningModule):
-    """Entraine neck + tete (`head`, un Downstream) sur un backbone gele (sondage lineaire, FPN,
+    """Entraine `downstream` (neck + tete) sur un backbone gele (sondage lineaire, FPN,
     detection), ou la tete seule sur un neck gele (`freeze_neck`).
 
     Le backbone reste en mode eval meme sous `train()` ; seuls neck et tete recoivent des
@@ -34,7 +34,7 @@ class FrozenBackboneModule(L.LightningModule):
     def __init__(
         self,
         backbone: nn.Module,
-        head: nn.Module,
+        downstream: nn.Module,
         task: Task,
         lr: float = 1e-3,
         weight_decay: float = 1e-4,
@@ -42,10 +42,10 @@ class FrozenBackboneModule(L.LightningModule):
     ) -> None:
         super().__init__()
         self.backbone = freeze(backbone)
-        self.head = head
+        self.downstream = downstream
         self.freeze_neck = freeze_neck
         if freeze_neck:
-            freeze(head.neck)
+            freeze(downstream.neck)
         self.task = task
         self.lr, self.weight_decay = lr, weight_decay
         self.metric = task.metric()
@@ -54,7 +54,7 @@ class FrozenBackboneModule(L.LightningModule):
         super().train(mode)
         self.backbone.eval()
         if self.freeze_neck:
-            self.head.neck.eval()
+            self.downstream.neck.eval()
         return self
 
     def features(self, x: Tensor | dict[str, Tensor]) -> dict[str, Tensor]:
@@ -67,7 +67,7 @@ class FrozenBackboneModule(L.LightningModule):
     def training_step(self, batch: tuple[Any, Any], batch_idx: int) -> Tensor:
         x, y = batch
         feats = self.features(x)
-        out = self.head({k: v.float() for k, v in feats.items()})
+        out = self.downstream({k: v.float() for k, v in feats.items()})
         loss = self.task.loss(to_float(out), y)
         self.log("train/loss", loss.detach(), batch_size=len(next(iter(feats.values()))))
         return loss
@@ -77,14 +77,14 @@ class FrozenBackboneModule(L.LightningModule):
 
     def validation_step(self, batch: tuple[Any, Any], batch_idx: int) -> None:
         x, y = batch
-        self.metric.update(to_float(self.head(self.features(x))), y)
+        self.metric.update(to_float(self.downstream(self.features(x))), y)
 
     def on_validation_epoch_end(self) -> None:
         scores = self.metric.compute()
         self.log_dict({f"val/{k}": v for k, v in scores.items()})
 
     def configure_optimizers(self) -> dict[str, Any]:
-        params = [p for p in self.head.parameters() if p.requires_grad]  # sans le neck gele
+        params = [p for p in self.downstream.parameters() if p.requires_grad]  # sans le neck gele
         opt = torch.optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay)
         total = self.trainer.estimated_stepping_batches
         sched = torch.optim.lr_scheduler.LambdaLR(

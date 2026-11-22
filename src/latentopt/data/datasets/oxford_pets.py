@@ -51,6 +51,16 @@ class SegSource:
         return img.convert("RGB"), mask
 
 
+def trainval_rows(base: Path) -> list[tuple[str, int]]:
+    """(nom, espece : 0 chat, 1 chien) de annotations/trainval.txt, dans l'ordre du fichier."""
+    rows = []
+    for line in (base / "annotations" / "trainval.txt").read_text(encoding="utf-8").splitlines():
+        if line and not line.startswith("#"):
+            name, _, species, _ = line.split()
+            rows.append((name, int(species) - 1))
+    return rows
+
+
 class DetSource:
     """Images de trainval annotees -> (image PIL RGB, {"box": xyxy dans [0, 1], "label"})."""
 
@@ -58,13 +68,11 @@ class DetSource:
         base = (root or datasets_root()) / FOLDER
         require(base, "oxford_pets")
         self.images, xmls = base / "images", base / "annotations" / "xmls"
-        self.items = []
-        for line in (base / "annotations" / "trainval.txt").read_text().splitlines():
-            if not line or line.startswith("#"):
-                continue
-            name, _, species, _ = line.split()
-            if (xmls / f"{name}.xml").exists():
-                self.items.append((name, int(species) - 1, read_box(xmls / f"{name}.xml")))
+        self.items = [
+            (n, s, read_box(xmls / f"{n}.xml"))
+            for n, s in trainval_rows(base)
+            if (xmls / f"{n}.xml").exists()
+        ]
 
     def ids(self) -> list[str]:
         return [name for name, _, _ in self.items]
@@ -162,13 +170,8 @@ class PoolSource:
         require(base, "oxford_pets")
         freeze_det_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
         excluded = set(splits.load(DET_NAME)["splits"]["test"])
-        self.images, self.items = base / "images", []
-        for line in (base / "annotations" / "trainval.txt").read_text().splitlines():
-            if not line or line.startswith("#"):
-                continue
-            name, _, species, _ = line.split()
-            if name not in excluded:
-                self.items.append((name, int(species) - 1))
+        self.images = base / "images"
+        self.items = [(n, s) for n, s in trainval_rows(base) if n not in excluded]
 
     def ids(self) -> list[str]:
         return [name for name, _ in self.items]

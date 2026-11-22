@@ -39,7 +39,6 @@ from latentopt.evaluation.tasks import Task, get_task
 from latentopt.methods import FrozenBackboneModule
 from latentopt.models import recipe
 from latentopt.models.contract import (
-    Downstream,
     count_params,
     load_neck,
     save_head,
@@ -114,10 +113,11 @@ def cached_datasets(
 def build(cfg: DictConfig) -> tuple[FrozenBackboneModule, DataLoader, DataLoader]:
     """Config -> module Lightning et DataLoaders (testable).
 
-    Ordre fixe : backbone construit, puis graine, puis neck et tete (init) ; la graine
-    ne depend donc pas du backbone. L'extraction des features se fait avant la graine, pour
-    ne decaler ni l'init ni l'ordre des donnees. Avec `neck_from`, le neck recoit ses poids
-    enregistres (ValueError s'ils ont ete appris sur un autre backbone) et reste gele.
+    Ordre fixe : graine, backbone (poids aleatoires reproductibles), extraction des features
+    (cache_features), puis de nouveau la graine avant le neck et la tete (recipe.build, init) :
+    leur init et l'ordre des donnees ne dependent ni du backbone ni de l'extraction. Avec
+    `neck_from`, le neck recoit ensuite ses poids enregistres (ValueError s'ils ont ete appris
+    sur un autre backbone) et reste gele.
     """
     task = get_task(cfg.task)
     L.seed_everything(cfg.seed, workers=False)  # backbone a poids aleatoires : reproductible
@@ -133,12 +133,11 @@ def build(cfg: DictConfig) -> tuple[FrozenBackboneModule, DataLoader, DataLoader
         workers, val_collate, train_collate = cfg.env.num_workers, task.collate_fn, None
 
     L.seed_everything(cfg.seed, workers=False)
-    neck = recipe.build_neck(cfg.neck, backbone)
+    downstream = recipe.build(cfg.neck, cfg.head, backbone, task.num_classes)
     frozen = bool(cfg.get("neck_from"))
-    if frozen:
-        load_neck(neck, Path(cfg.neck_from) / "neck.pt", backbone)
-    head = Downstream(neck, recipe.build_head(cfg.head, neck, task.num_classes))
-    module = FrozenBackboneModule(backbone, head, task, **cfg.optimizer, freeze_neck=frozen)
+    if frozen:  # apres l'init : le chargement ne tire aucun nombre aleatoire
+        load_neck(downstream.neck, Path(cfg.neck_from) / "neck.pt", backbone)
+    module = FrozenBackboneModule(backbone, downstream, task, **cfg.optimizer, freeze_neck=frozen)
     train = DataLoader(
         train_ds,
         batch_size=cfg.batch_size,
@@ -169,6 +168,7 @@ def names(task: Task, neck_from: str | None) -> tuple[str, str]:
 def main(cfg: DictConfig) -> None:
     os.environ["DATA_ROOT"] = cfg.env.data_root
     os.environ["OUTPUT_ROOT"] = cfg.env.results_root  # runs designes par leur nom (hub.locate)
+    ckpt = run.resume_checkpoint(cfg.resume)  # avant tout calcul : chemin faux = arret
     run_dir = Path(HydraConfig.get().runtime.output_dir)
     if cfg.get("neck_from"):
         with open_dict(cfg):
@@ -179,12 +179,13 @@ def main(cfg: DictConfig) -> None:
     mlflow = run.mlflow_logger(cfg, "train", run_dir, git)
 
     module, train, val = build(cfg)
-    task, head = module.task, module.head
+    task, downstream = module.task, module.downstream
     neck_name, head_name = names(task, cfg.get("neck_from"))
     log.info("%s : neck %s (%s, %s parametres%s), tete %s (%s, %s parametres)",
-             task.name, neck_name, type(head.neck).__name__, f"{count_params(head.neck):,}",
-             ", gele" if module.freeze_neck else "", head_name, type(head.head).__name__,
-             f"{count_params(head.head):,}")  # fmt: skip
+             task.name, neck_name, type(downstream.neck).__name__,
+             f"{count_params(downstream.neck):,}",
+             ", gele" if module.freeze_neck else "", head_name, type(downstream.head).__name__,
+             f"{count_params(downstream.head):,}")  # fmt: skip
     trainer = L.Trainer(
         max_epochs=cfg.epochs,
         limit_train_batches=cfg.max_steps_per_epoch,
@@ -200,11 +201,11 @@ def main(cfg: DictConfig) -> None:
         devices=1,
         **settings,
     )
-    trainer.fit(module, train, val, ckpt_path=cfg.resume)
+    trainer.fit(module, train, val, ckpt_path=ckpt)
 
     scores = {k.removeprefix("val/"): float(v) for k, v in trainer.callback_metrics.items()
               if k.startswith("val/")}  # fmt: skip
-    backbone, neck = module.backbone.cpu(), head.neck.cpu()
+    backbone, neck = module.backbone.cpu(), downstream.neck.cpu()
     if module.freeze_neck:
         folder = Path(cfg.neck_from)
         neck_sha = weights_hash(neck)
@@ -218,7 +219,7 @@ def main(cfg: DictConfig) -> None:
         neck_ref = folder.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:  # hors de l'arborescence (hydra.run.dir surcharge, neck d'ailleurs)
         neck_ref = folder.resolve().as_posix()
-    sha = save_head(head.head.cpu(), run_dir / "head.pt", backbone, neck, seed=cfg.seed,
+    sha = save_head(downstream.head.cpu(), run_dir / "head.pt", backbone, neck, seed=cfg.seed,
                     val=scores, epochs=cfg.epochs, task=task.name, neck_dir=neck_ref)  # fmt: skip
     results = {
         "task": task.name,
@@ -227,8 +228,8 @@ def main(cfg: DictConfig) -> None:
         "neck": neck_ref,
         "neck_frozen": module.freeze_neck,
         "names": {"neck": neck_name, "head": head_name},
-        "classes": {"neck": type(head.neck).__name__, "head": type(head.head).__name__},
-        "params": {"neck": count_params(head.neck), "head": count_params(head.head)},
+        "classes": {"neck": type(downstream.neck).__name__, "head": type(downstream.head).__name__},
+        "params": {"neck": count_params(downstream.neck), "head": count_params(downstream.head)},
         "backbone_sha256": sha,
         "neck_sha256": neck_sha,
         "backbone_params": count_params(backbone),
@@ -237,6 +238,7 @@ def main(cfg: DictConfig) -> None:
         "precision": settings["precision"],
         "git_commit": git["commit"],
         "git_dirty": git["dirty"],
+        "resumed_from": run.resumed_from(cfg, ckpt),
     }
     hub.write_card(run_dir, results)
     # en dernier : marque le run termine (hub.parts)

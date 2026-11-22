@@ -55,6 +55,8 @@ def isolated_data(tmp_path, monkeypatch) -> Path:
     # fin du test si quelque chose l'a definie entre-temps (elle fuirait vers les tests suivants)
     monkeypatch.setenv("MLFLOW_TRACKING_URI", "")
     monkeypatch.delenv("MLFLOW_TRACKING_URI")
+    # comme run.quiet_libraries, que les tests qui appellent mlflow_logger directement sautent
+    monkeypatch.setenv("MLFLOW_DISABLE_AGENT_HINT", "1")
     return root
 
 

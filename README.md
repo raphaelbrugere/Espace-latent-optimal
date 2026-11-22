@@ -10,7 +10,7 @@ Un réseau se décompose en deux parties :
 - l’**extracteur de features (backbone)**, qui projette le signal brut (image, son, texte…) dans un espace latent ne conservant que sa sémantique ;
 - la **tête applicative**, qui utilise ces features pour produire la prédiction.
 
-On mutualise donc le backbone et on ajoute une tête par tâche, comme le font VampNet [0], NeuroCorgi [1] ou CLIP [2]. Cela réduit la charge de calcul et ouvre la voie à des implémentations très spécialisées et très efficaces énergétiquement (cf. NeuroCorgi [1]).
+On mutualise donc le backbone et on ajoute une tête par tâche, comme le font NeuroCorgi [1] ou CLIP [2] ; VampNet [0] pousse l'idée plus loin avec un seul modèle qui change de tâche par masquage, sans tête dédiée. Cela réduit la charge de calcul et ouvre la voie à des implémentations très spécialisées et très efficaces énergétiquement (cf. NeuroCorgi [1]).
 
 ## Objectifs
 
@@ -23,8 +23,8 @@ On mutualise donc le backbone et on ajoute une tête par tâche, comme le font V
 
 ## Références
 
-- [0] VampNet
-- [1] NeuroCorgi
+- [0] VampNet — Flores García et al., *VampNet: Music Generation via Masked Acoustic Token Modeling*, ISMIR 2023
+- [1] NeuroCorgi — Miro-Panades et al. (CEA-List), *A 772μJ/frame ImageNet Feature Extractor Accelerator on HD Images at 30FPS*, APCCAS 2024
 - [2] CLIP — Radford et al., *Learning Transferable Visual Models From Natural Language Supervision*, 2021
 - [3] LeJEPA — Balestriero & LeCun, *LeJEPA: Provable and Scalable Self-Supervised Learning Without the Heuristics*, 2025
 - [4] MobileNetV2 — Sandler et al., *MobileNetV2: Inverted Residuals and Linear Bottlenecks*, 2018
@@ -129,7 +129,7 @@ entraînement de neck + tête (ses évaluations dans `eval/`) : config résolue,
 `results.json` ([docs/HUB.md](docs/HUB.md) pour les noms).
 
 ```bash
-# vérifier le pipeline en ~1 min, sur CPU et données synthétiques
+# vérifier le pipeline sur CPU et données synthétiques
 uv run lo pretrain experiment=smoke
 uv run lo train experiment=smoke_train task=synthetic_cls,synthetic_seg,synthetic_det -m
 

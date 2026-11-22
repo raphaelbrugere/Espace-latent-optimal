@@ -12,7 +12,8 @@
 # neck, head et epochs absents : ceux de la baseline de la tache (evaluation/tasks.py).
 # Chaque run ecrit dans results/<run>/ (docs/HUB.md) :
 #   downstream/<tache>-<neck>-<tete>-<AAAAMMJJ_HHMMSS>/
-#       neck.pt (pas avec neck_from), head.pt, README.md, results.json, config, run.log, mlflow.db
+#       neck.pt (pas avec neck_from), head.pt, results.json (ecrit en dernier) et les fichiers
+#       communs a tout run (liste complete : docs/HUB.md#un-dossier-par-backbone)
 defaults:
   - common/hydra
   - backbone: ??? # obligatoire : from_run, vit_s8_dino...
@@ -38,8 +39,8 @@ backbone_run: ""
 backbone_data: none # donnees de pre-entrainement d'un backbone externe (ex. imagenet1k)
 backbone_method: none # methode d'un backbone externe (ex. dino)
 seed: 0 # graine du neck et de la tete (init, ordre des donnees), enregistree dans les .pt
-resume: null
-allow_dirty: false
+resume: null # last.ckpt d'un entrainement interrompu ; nouveau dossier date (docs/COMMANDS.md)
+allow_dirty: false # true : autorise un run sur le DCE (job ou session interactive) avec un arbre git non commite
 
 # Features du backbone extraites une fois dans data/features/ (cle : empreinte du backbone),
 # puis neck et tete entraines dessus. false : backbone applique a la volee a chaque epoch.
@@ -67,4 +68,8 @@ hydra:
     dir: ${hydra.sweep.dir}/${hydra.sweep.subdir}
   sweep:
     dir: ${env.results_root}
+    # train_dir (hub.train_dir), arguments positionnels dans cet ordre : 1 choix du backbone,
+    # 2 backbone.run, 3 backbone_run (`forced` en Python), 4 backbone_data, 5 backbone_method,
+    # 6 task, 7 choix du neck, 8 choix de la tete, 9 neck_from, 10 numero du job (-m). Verifie par
+    # tests/test_configs.py (test_train_dir_from_config).
     subdir: ${train_dir:${hydra.runtime.choices.backbone},${oc.select:backbone.run,""},${backbone_run},${backbone_data},${backbone_method},${task},${hydra.runtime.choices.neck},${hydra.runtime.choices.head},${neck_from},${oc.select:hydra.job.num,""}}

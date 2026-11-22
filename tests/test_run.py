@@ -31,16 +31,22 @@ def test_dce_outside_slurm_is_refused(monkeypatch):
         run.check_launch(cfg("dce"), CLEAN)
 
 
-def test_dce_long_job_with_dirty_tree_is_refused(monkeypatch):
+def test_dce_run_with_dirty_tree_is_refused(monkeypatch):
     monkeypatch.setenv("SLURM_JOB_ID", "1")
     with pytest.raises(RuntimeError, match="src/x.py"):
         run.check_launch(cfg("dce"), DIRTY)
 
 
-def test_dce_dirty_tree_allowed_explicitly_or_for_smoke(monkeypatch):
+def test_dce_dirty_tree_is_not_exempted_by_experiment_name(monkeypatch):
+    # l'exemption des smoke runs est allow_dirty: true dans leur config, pas leur nom
+    monkeypatch.setenv("SLURM_JOB_ID", "1")
+    with pytest.raises(RuntimeError, match="non commite"):
+        run.check_launch(cfg("dce", experiment="smoke"), DIRTY)
+
+
+def test_dce_dirty_tree_allowed_explicitly(monkeypatch):
     monkeypatch.setenv("SLURM_JOB_ID", "1")
     run.check_launch(cfg("dce", allow_dirty=True), DIRTY)
-    run.check_launch(cfg("dce", experiment="smoke"), DIRTY)
     run.check_launch(cfg("dce"), CLEAN)
 
 
@@ -145,7 +151,7 @@ def test_cuda_with_unusable_gpu_is_refused(gpu_broken):
 
 @pytest.mark.parametrize("bad", [("tpu", "fp32"), ("cpu", "fp8")])
 def test_unknown_device_or_precision_fails(bad):
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError, match="recu"):
         run.lightning_settings(*bad)
 
 
@@ -319,6 +325,23 @@ def test_mlflow_env_uri_takes_precedence(tmp_path, monkeypatch):
     assert run.mlflow_uri(mlflow_cfg(tmp_path), tmp_path) == "http://serveur:5000"
 
 
+def test_mlflow_env_uri_beats_disabled_with_warning(tmp_path, monkeypatch, caplog):
+    """env.mlflow=false ne coupe pas le suivi vers le serveur, mais le dit."""
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "http://serveur:5000")
+    with caplog.at_level("WARNING", logger=run.__name__):
+        uri = run.mlflow_uri(mlflow_cfg(tmp_path, enabled=False), tmp_path)
+    assert uri == "http://serveur:5000"
+    assert "env.mlflow=false ignore" in caplog.text
+    assert "http://serveur:5000" in caplog.text
+
+
+def test_mlflow_env_uri_no_warning_when_enabled(tmp_path, monkeypatch, caplog):
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "http://serveur:5000")
+    with caplog.at_level("WARNING", logger=run.__name__):
+        run.mlflow_uri(mlflow_cfg(tmp_path), tmp_path)
+    assert "env.mlflow=false" not in caplog.text
+
+
 def test_mlflow_records_config_git_and_results(tmp_path, monkeypatch):
     monkeypatch.setenv("SLURM_JOB_ID", "123")
     run_dir = run_dir_of(
@@ -434,3 +457,61 @@ def test_mlflow_eval_has_its_own_database_tagged_like_its_training(tmp_path):
     assert r.info.run_name == f"{BB}/downstream/{DS}/eval/test-20261118_100000"
     tags = r.data.tags
     assert tags["eval_split"] == "test" and tags["downstream"] == DS and tags["neck"] == "fpn"
+
+
+# --- resume ------------------------------------------------------------------------------
+
+
+def checkpoint_of(tmp_path, monkeypatch):
+    """last.ckpt d'un run interrompu sous OUTPUT_ROOT (tmp_path/results)."""
+    root = tmp_path / "results"
+    monkeypatch.setenv("OUTPUT_ROOT", root.as_posix())
+    ckpt = run_dir_of(tmp_path, BB, "backbone", "checkpoints") / "last.ckpt"
+    ckpt.write_bytes(b"ckpt")
+    return ckpt
+
+
+def test_resume_does_not_depend_on_the_launch_folder(tmp_path, monkeypatch):
+    """Nom de run, chemin results/<run>/... ou chemin absolu : meme checkpoint, quel que soit le
+    dossier courant (lo se lance depuis n'importe quel dossier du depot)."""
+    ckpt = checkpoint_of(tmp_path, monkeypatch)
+    elsewhere = tmp_path / "ailleurs"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    rel = f"{BB}/backbone/checkpoints/last.ckpt"
+    for resume in (rel, f"results/{rel}", ckpt.as_posix()):
+        assert run.resume_checkpoint(resume).resolve() == ckpt.resolve()
+
+
+def test_no_resume_and_missing_checkpoint(tmp_path, monkeypatch):
+    checkpoint_of(tmp_path, monkeypatch)
+    assert run.resume_checkpoint(None) is None and run.resume_checkpoint("") is None
+    with pytest.raises(FileNotFoundError, match="resume="):
+        run.resume_checkpoint(f"{BB}/backbone/checkpoints/absent.ckpt")  # jamais telecharge
+    with pytest.raises(FileNotFoundError, match="n'est pas un fichier"):
+        run.resume_checkpoint(f"{BB}/backbone/checkpoints")  # un dossier, pas un fichier
+
+
+def test_resumed_from_is_relative_to_results_root(tmp_path, monkeypatch):
+    ckpt = checkpoint_of(tmp_path, monkeypatch)
+    cfg = mlflow_cfg(tmp_path)
+    assert run.resumed_from(cfg, ckpt) == f"{BB}/backbone/checkpoints/last.ckpt"
+    assert run.resumed_from(cfg, None) is None
+    outside = tmp_path / "autre.ckpt"
+    outside.write_bytes(b"ckpt")
+    assert run.resumed_from(cfg, outside) == outside.resolve().as_posix()
+
+
+def test_results_without_resume_still_make_a_card_and_mlflow_run(tmp_path):
+    """resumed_from=None (run non repris) : ni la fiche ni MLflow ne cassent."""
+    from latentopt import hub
+
+    part = run_dir_of(tmp_path, BB, "backbone")
+    res = {"epochs": 1, "steps": 3, "backbone_sha256": "ab" * 32, "resumed_from": None}
+    hub.write_card(part, res)
+    assert (part / hub.CARD).exists()
+    logger = run.mlflow_logger(mlflow_cfg(tmp_path), "pretrain", part, CLEAN)
+    run.mlflow_finish(logger, {**res, "resumed_from": None})
+    logger.finalize("success")
+    _, _, r = only_run(part)
+    assert "results/resumed_from" not in r.data.tags and r.data.metrics["results/epochs"] == 1

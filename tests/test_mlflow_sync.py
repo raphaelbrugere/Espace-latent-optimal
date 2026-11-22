@@ -49,7 +49,8 @@ def results(tmp_path):
 def test_sync_copies_runs_faithfully(results):
     run_dir = make_run(results, "pretrain", "exp", "2026-01-01")
     db = results / "mlflow.db"
-    assert mlflow_sync.sync([results], db) == {"imported": 1, "present": 0, "running": 0}
+    assert mlflow_sync.sync([results], db) == {
+        "imported": 1, "updated": 0, "present": 0, "running": 0}  # fmt: skip
 
     client, runs = central_runs(db)
     ((exp, r),) = runs
@@ -82,9 +83,11 @@ def test_sync_is_idempotent(results):
     make_run(results, "pretrain", "exp", "a")
     db = results / "mlflow.db"
     mlflow_sync.sync([results], db)
-    assert mlflow_sync.sync([results], db) == {"imported": 0, "present": 1, "running": 0}
+    assert mlflow_sync.sync([results], db) == {
+        "imported": 0, "updated": 0, "present": 1, "running": 0}  # fmt: skip
     make_run(results, "pretrain", "exp", "b")
-    assert mlflow_sync.sync([results], db) == {"imported": 1, "present": 1, "running": 0}
+    assert mlflow_sync.sync([results], db) == {
+        "imported": 1, "updated": 0, "present": 1, "running": 0}  # fmt: skip
     assert len(central_runs(db)[1]) == 2
 
 
@@ -95,6 +98,43 @@ def test_running_runs_are_skipped_unless_asked(results):
     assert central_runs(db)[1] == []
     assert mlflow_sync.sync([results], db, include_running=True)["imported"] == 1
     assert mlflow_sync.sync([results], db, include_running=True)["present"] == 1
+
+
+def test_running_copy_is_replaced_once_the_source_finishes(results):
+    """Run importe en cours (--include-running), termine ensuite : le sync suivant remplace
+    la copie figee par le run complet, une seule fois."""
+    run_dir = make_run(results, "pretrain", "exp", "en_cours", status=None)
+    db = results / "mlflow.db"
+    assert mlflow_sync.sync([results], db, include_running=True)["imported"] == 1
+    ((_, old),) = central_runs(db)[1]
+    assert old.info.status == "RUNNING"
+
+    src = mlflow.MlflowClient(mlflow_sync.sqlite_uri(run_dir / "mlflow.db"))
+    (orig,) = src.search_runs([e.experiment_id for e in src.search_experiments()])
+    src.log_metric(orig.info.run_id, "train/loss", 0.1, step=3)
+    src.set_terminated(orig.info.run_id, status="FINISHED")
+
+    assert mlflow_sync.sync([results], db) == {
+        "imported": 0, "updated": 1, "present": 0, "running": 0}  # fmt: skip
+    client, runs = central_runs(db)
+    ((_, r),) = runs  # une seule copie active ; l'ancienne est a la corbeille
+    assert r.info.run_id != old.info.run_id
+    assert r.info.status == "FINISHED" and r.info.end_time is not None
+    assert r.data.tags["source_run_id"] == orig.info.run_id
+    history = client.get_metric_history(r.info.run_id, "train/loss")
+    assert [m.step for m in history] == [0, 1, 2, 3]
+    assert client.get_run(old.info.run_id).info.lifecycle_stage == "deleted"
+    assert mlflow_sync.sync([results], db)["present"] == 1  # puis plus rien a faire
+
+
+def test_deleted_central_run_is_not_reimported(results):
+    make_run(results, "pretrain", "exp", "a")
+    db = results / "mlflow.db"
+    mlflow_sync.sync([results], db)
+    client, ((_, r),) = central_runs(db)
+    client.delete_run(r.info.run_id)
+    assert mlflow_sync.sync([results], db)["present"] == 1
+    assert central_runs(db)[1] == []
 
 
 def test_sync_merges_several_sources_into_one_experiment(tmp_path):
@@ -152,7 +192,7 @@ def test_a_run_both_local_and_on_the_hub_is_imported_once(tmp_path):
     shutil.copytree(run_dir, copy)
     db = tmp_path / "data" / "mlflow.db"
     assert mlflow_sync.sync([results, copy.parent], db) == {
-        "imported": 1, "present": 1, "running": 0}  # fmt: skip
+        "imported": 1, "updated": 0, "present": 1, "running": 0}  # fmt: skip
     assert mlflow_sync.sync([copy.parent], db)["present"] == 1
     assert len(central_runs(db)[1]) == 1
 

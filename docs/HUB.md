@@ -22,6 +22,7 @@ results/<données>-<archi>-<méthode>-<AAAAMMJJ_HHMMSS>/   ⇄  Espace-latent-op
     │                                      lo train : neck.pt, head.pt, README.md, results.json,
     │                                      config.yaml, git.txt, lineage.json, metrics.csv,
     │                                      run.log, mlflow.db
+    ├── checkpoints/                       reprise d'un run interrompu (jamais publié)
     └── eval/<split>-<AAAAMMJJ_HHMMSS>/    lo eval : results.json, config.yaml, git.txt,
                                            lineage.json, mlflow.db
 ```
@@ -41,7 +42,7 @@ imagenet1k-vit_s8_dino-dino-20261117_100000/                     backbone extern
 | `<données>` | nom court (`ABBREV`) du module du dataset de pré-entraînement : `imnt160` (Imagenette 160px), `fl102`, `gal10d`, `pets`, `synth` ; défini dans le code, pas dans les configs, et figé |
 | `<archi>` | groupe `backbone` (`vit_s8`, `vit_s8_dino`…) |
 | `<méthode>` | groupe `method` (`lejepa`…) |
-| `<AAAAMMJJ_HHMMSS>` | date du lancement ; `_1`, `_2`… pour les jobs 1, 2… d'un balayage `-m` |
+| `<AAAAMMJJ_HHMMSS>` | date du lancement ; `_1`, `_2`… pour les jobs 1, 2… d'un balayage `-m` (date propre à chaque job sur Slurm, commune en local) |
 | `<tâche>` | tâche entraînée (`evaluation/tasks.py`) |
 | `<neck>` | config du groupe `neck` (`embed_norm`, `fpn`, `conv_trunk`) ; sans `neck=`, celui de la baseline de la tâche ; avec `neck_from`, celui du neck repris |
 | `<tête>` | config du groupe `head` (`linear`, `conv_seg`, `soft_argmax`) ; sans `head=`, celle de la baseline de la tâche |
@@ -66,20 +67,19 @@ propre config, donc son propre nom. Les hyperparamètres, le commit et l'expéri
 le nom : ils sont dans `config.yaml`, `results.json` et MLflow.
 
 **Limites du Hub** : nom de dépôt de 96 caractères au plus, sans `--` (`hub.repo_id` refuse un nom
-invalide) ; 10 000 entrées au plus par dossier, et moins de 100 000 fichiers par dépôt
-recommandés. Les exemples ci-dessus font 40 et 43 caractères.
+invalide).
 
 ## Ce que contient chaque dossier
 
 | Fichier | Contenu |
 |---|---|
-| `neck.pt` | `state_dict`, `params`, `seed`, `backbone_sha256`, `neck_sha256`, `config` ; absent avec `neck_from` |
-| `head.pt` | `state_dict` (la tête seule), `params`, `seed`, `backbone_sha256`, `neck_sha256`, `neck_dir` (dossier du neck, relatif au dossier du backbone) |
+| `neck.pt` | `state_dict`, `params`, `seed`, `argv`, `backbone_sha256`, `neck_sha256`, `config` ; absent avec `neck_from` |
+| `head.pt` | `state_dict` (la tête seule), `params`, `seed`, `argv`, `backbone_sha256`, `neck_sha256`, `neck_dir` (dossier du neck, relatif au dossier du backbone) |
 | `downstream/…/results.json` | scores val, `params` : `{"neck", "head"}` comptés séparément, `backbone_params`, `neck` (dossier du neck : le sien, ou celui repris), `neck_frozen`, `names`, `classes`, commit |
 | `eval/…/results.json` | `split`, score, métriques, paramètres du backbone, du neck et de la tête, violations |
 | `README.md` | fiche du dossier (`hub.write_card`), écrite à la fin du run : `backbone/` et `downstream/<…>/` |
 
-`results.json` est écrit **en dernier** : sa présence marque le run terminé (`hub.parts`). Au
+`results.json` est écrit **en dernier** : avec `config.yaml` et les poids, sa présence marque une partie terminée (`hub.parts`). Au
 chargement, chaque `.pt` est vérifié contre l'empreinte des poids qu'il attend : un neck ou une
 tête appris sur un autre backbone (ou un autre neck) est signalé.
 
@@ -107,7 +107,7 @@ uv run lo train backbone=from_run backbone.run=imnt160-vit_s8-lejepa-20261116_18
 uv run lo eval downstream='[imnt160-vit_s8-lejepa-20261116_183012/downstream/pets_seg-fpn-conv_seg-20261117_090000,...]'
 ```
 
-`results/` est `env.results_root` (variable `OUTPUT_ROOT`, sinon `<projet>/results`).
+`results/` est `env.results_root` (variable `OUTPUT_ROOT` : [DATASETS.md](DATASETS.md#variables-denvironnement)).
 
 ## Dossiers de sortie
 
@@ -116,7 +116,7 @@ uv run lo eval downstream='[imnt160-vit_s8-lejepa-20261116_183012/downstream/pet
 | `lo pretrain` | `results/<run>/backbone/` |
 | `lo train` | `results/<run>/downstream/<tâche>-<neck>-<tête>-<date>/` : neck et tête |
 | `lo train neck_from=<…>` | `results/<run>/downstream/<tâche>-<neck repris>-<tête>-<date>/` : tête seule, le neck repris reste gelé |
-| `lo eval` | `<dossier évalué>/eval/<split>-<date>/` pour chaque dossier ; journal du lancement dans `results/.eval/<date>/` |
+| `lo eval` | `<dossier évalué>/eval/<split>-<date>/` pour chaque dossier ; journal du lancement (`run.log`) dans `results/.eval/<date>/` |
 
 Pour `lo train`, le `<run>` du backbone vient :
 
@@ -143,8 +143,10 @@ uv run lo hub push <run>
 uv run lo hub push <run> --dry-run
 ```
 
-- **Seuls les runs terminés sont publiés**, c'est-à-dire ceux qui ont leur `results.json` (plus
-  `backbone.pt` ou `head.pt`). Un run en cours attend la publication suivante.
+- **Seuls les runs terminés sont publiés** : `backbone/` avec `backbone.pt`, `config.yaml` et
+  `results.json` ; `downstream/<…>/` avec `head.pt`, `config.yaml` et `results.json` ; `eval/<…>/`
+  avec son `results.json`, sous un entraînement terminé. Un run en cours attend la publication
+  suivante.
 - **Le push n'envoie que les fichiers absents du dépôt**, en un commit. Un dossier de run n'étant
   jamais modifié, une copie locale d'un run déjà publié (obtenue par `pull`) n'est jamais renvoyée :
   **un push ne peut pas écraser ce que d'autres ont publié**, quel que soit l'ordre des push.
@@ -202,4 +204,3 @@ entraînement créent deux dossiers `eval/` distincts.
   dépôts). Il n'y a pas de token d'organisation à partager : chaque token Write agit avec le rôle
   de son propriétaire.
 - **Visibilité** : privé tant que les résultats ne sont pas publiés.
-- **Avatar** : [`docs/assets/icon.jpg`](assets/icon.jpg).

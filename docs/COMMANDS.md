@@ -5,8 +5,8 @@ par famille ; `latentopt` est son nom long). Elle se lance depuis n'importe quel
 Installation du compte DCE, partitions, nœuds et pièges de Slurm : voir [slurm/README.md](../slurm/README.md).
 
 Sur le DCE, `launcher=long` (ou `launcher=short`) soumet un job Slurm via submitit, à condition
-d'ajouter **`-m`**. Sans `-m`, le script refuse de tourner sur la passerelle. `-m` se place
-**après tous les overrides**. La commande garde le terminal jusqu'à la fin des jobs : la lancer
+d'ajouter **`-m`**. Sans `-m`, le script refuse de tourner sur la passerelle. Place de `-m` :
+[Pièges](#pièges). La commande garde le terminal jusqu'à la fin des jobs : la lancer
 dans `tmux` ([slurm/README.md](../slurm/README.md#lancer-un-job)).
 
 ## 1. Après chaque `git pull`
@@ -53,7 +53,7 @@ pour pouvoir tourner sur CPU.
 ## 5. Pré-entraînement d'un backbone
 
 ```bash
-# baseline (bf16, 800 epochs, ~14 h)
+# baseline (bf16, 800 epochs)
 uv run lo pretrain experiment=vit_lejepa_imagenette launcher=long -m
 
 # changer un réglage
@@ -66,13 +66,16 @@ uv run lo pretrain experiment=vit_lejepa_imagenette method.model.lamb=0.01,0.02,
 # true ou false pour l'imposer, meme resultat :
 uv run lo pretrain experiment=vit_lejepa_imagenette env.grad_checkpointing=true launcher=long -m
 
-# reprendre un run interrompu
-uv run lo pretrain experiment=vit_lejepa_imagenette resume=results/<run>/backbone/checkpoints/last.ckpt launcher=long -m
+# reprendre un run interrompu depuis son last.ckpt (chemin absolu, relatif à la racine du dépôt,
+# ou commençant par <run>) : le run repris écrit dans un NOUVEAU dossier daté, avec son propre
+# metrics.csv et son propre run MLflow ; results.json y note resumed_from. L'ancien dossier
+# n'est pas modifié et reste sans results.json (run inachevé, jamais publié).
+uv run lo pretrain experiment=vit_lejepa_imagenette resume=<run>/backbone/checkpoints/last.ckpt launcher=long -m
 ```
 
-Sortie : `results/<données>-<archi>-<méthode>-<AAAAMMJJ_HHMMSS>/backbone/` (`backbone.pt`, `results.json`,
-`README.md`, `run.log`, `metrics.csv`, `config.yaml`, `git.txt`, `lineage.json`, `mlflow.db`). Dans un balayage `-m`, les
-jobs 1, 2… ajoutent `_1`, `_2`… à la date. `<données>-<archi>-<méthode>-<date>` est le dossier du backbone, de
+Sortie : `results/<données>-<archi>-<méthode>-<AAAAMMJJ_HHMMSS>/backbone/` : `backbone.pt`, `results.json`
+(écrit en dernier) et les fichiers communs à tout run (liste : [HUB.md](HUB.md#un-dossier-par-backbone)). Dans un balayage `-m`, les
+jobs 1, 2… ajoutent `_1`, `_2`… à la date (propre à chaque job sur Slurm, commune en local). `<données>-<archi>-<méthode>-<date>` est le dossier du backbone, de
 ses entraînements downstream et de leurs évaluations, et son dépôt Hugging Face ([docs/HUB.md](HUB.md)).
 
 ## 6. Entraînement des necks et des têtes (backbone gelé)
@@ -99,13 +102,18 @@ uv run lo train backbone=from_run backbone.run=<run> task=pets_det head=soft_arg
 
 # sans cache de features : backbone appliqué à la volée (voir plus bas)
 uv run lo train backbone=from_run backbone.run=<run> task=pets_seg cache_features=false launcher=long -m
+
+# reprendre un entraînement interrompu : mêmes règles que pour lo pretrain (nouveau dossier
+# downstream/<...> daté, resumed_from dans results.json, ancien dossier laissé sans results.json)
+uv run lo train backbone=from_run backbone.run=<run> task=pets_seg resume=<run>/downstream/<dossier>/checkpoints/last.ckpt launcher=long -m
 ```
 
 Sans précision, le neck, la tête et le nombre d'epochs sont ceux de la baseline de chaque tâche.
 
 Sortie, dans le dossier du backbone `results/<run>/` ([docs/HUB.md](HUB.md)) :
-`downstream/<tâche>-<neck>-<tête>-<AAAAMMJJ_HHMMSS>/` : `neck.pt`, `head.pt`, `README.md`, `results.json`
-(score val, paramètres du neck et de la tête séparés, du backbone), `config.yaml`, `run.log`, `mlflow.db`.
+`downstream/<tâche>-<neck>-<tête>-<AAAAMMJJ_HHMMSS>/` : `neck.pt`, `head.pt`, `results.json` (score val,
+paramètres du neck et de la tête séparés, du backbone ; écrit en dernier) et les fichiers communs à tout run
+(liste : [HUB.md](HUB.md#un-dossier-par-backbone)).
 Avec `neck_from`, pas de `neck.pt` : le neck repris reste gelé, et `results.json` désigne son dossier.
 
 **Cache de features.** Il est activé par défaut. Les features du backbone sont calculées une
@@ -124,9 +132,10 @@ uv run lo eval downstream='[...]' split=test
 ```
 
 Sortie : un nouveau dossier `eval/<split>-<AAAAMMJJ_HHMMSS>/` dans chaque dossier évalué, avec
-`results.json` (score, métriques, paramètres du backbone, du neck et de la tête, violations), `config.yaml`,
-`git.txt`, `lineage.json` et un run MLflow `eval/<experiment_name>` dans son `mlflow.db`. Le dossier
-d'entraînement n'est pas modifié. Seul le journal du lancement va dans `results/.eval/<date>/`. Violations signalées :
+`results.json` (score, métriques, paramètres du backbone, du neck et de la tête, violations ; écrit en
+dernier), un run MLflow `eval/<experiment_name>` dans son `mlflow.db`, et les autres fichiers listés dans
+[HUB.md](HUB.md#un-dossier-par-backbone). Le dossier
+d'entraînement n'est pas modifié. Seul le journal du lancement (`run.log`) va dans `results/.eval/<date>/`. Violations signalées :
 backbone de plus de 30M paramètres, neck ou tête appris sur d'autres poids que ceux chargés.
 
 ## 8. Suivre les jobs
@@ -152,56 +161,18 @@ réseau. Un run MLflow contient :
 |---|---|
 | Expérience | `pretrain/<experiment_name>`, `train/<experiment_name>`, `eval/<experiment_name>` |
 | Nom | chemin du dossier sous `results/` : `<run>/backbone`, `<run>/downstream/<tâche>-<neck>-<tête>-<date>` (train), suivi de `/eval/<split>-<date>` (eval) |
-| Paramètres | config résolue complète, aplatie (`method/lr`, `backbone/arch`…), y compris `env/*` (propre à la machine) |
+| Paramètres | config résolue complète, aplatie avec `/` jusqu'aux feuilles : `method/optimizer/lr`, `method/model/lamb` (pretrain), `optimizer/lr`, `neck/channels` (train) ; y compris `env/*` (propre à la machine) |
 | Métriques | courbes par pas et par epoch (`train/*`, `val/*`) ; résultats finaux `results/*` (scores, paramètres, heures GPU) |
-| Tags : nom | `data`, `arch`, `method`, `backbone_date`, `backbone_run`, `hub_repo` (dépôt de destination, [docs/HUB.md](HUB.md)), plus `task`, `neck`, `head` et `downstream` (nom du dossier d'entraînement, commun à l'entraînement et à ses évaluations) |
+| Tags : nom | `data`, `arch`, `method`, `backbone_date`, `backbone_run`, `stage`, `hub_repo` (dépôt de destination, [docs/HUB.md](HUB.md)), plus `task`, `neck`, `head` et `downstream` (nom du dossier d'entraînement, commun à l'entraînement et à ses évaluations) |
 | Tags : traçabilité | `author`, `git_commit`, `git_branch`, `git_dirty`, `uv_lock_sha256`, `splits/<dataset>_sha256`, `results/backbone_sha256` |
 | Tags : machine | `host`, `env`, `slurm_job_id`, `env/python`, `env/torch`, `env/cuda`, `env/gpu`, `run_dir` |
 | Tags : évaluation | `eval_split` : `val` ou `test` |
 
 N'y entrent jamais : les poids (dossier du run, Hub) et les variables d'environnement (tokens).
 
-Pour comparer tous nos modèles, `lo mlflow sync` fusionne les bases des runs terminés dans la base
-d'équipe `data/mlflow.db`, avec leurs fichiers légers (`config.yaml`, `git.txt`, `lineage.json`,
-`results.json`, `run.log`). Expériences : `pretrain/<experiment_name>`, `train/<experiment_name>`,
-`eval/<experiment_name>`.
-
-Deux sources :
-- **le Hub** : chaque dépôt publié par `lo hub push` contient les `mlflow.db` de son backbone, de ses
-  entraînements et de leurs évaluations. Seules
-  les bases et les fichiers légers sont téléchargés (dans `data/mlflow_hub/`), jamais les poids ;
-- **son propre `results/`** : ses runs et évaluations pas encore publiés. Les runs des autres arrivent
-  par le Hub, une fois publiés : le sync ne lit jamais le home d'un autre.
-
-```bash
-hf auth login                            # une fois : les dépôts sont privés
-uv run lo mlflow sync                    # Hub + results/ -> data/mlflow.db
-uv run lo mlflow sync --no-hub           # results/ locaux seulement (hors ligne)
-uv run lo mlflow sync --include-running  # aussi les runs RUNNING (job tué par Slurm)
-```
-
-- **Commande manuelle**, lancée par une seule personne à la fois.
-- **Relancer n'importe que les nouveaux runs** : un run est reconnu par son identifiant MLflow
-  d'origine, qu'il vienne du Hub ou d'un dossier local ; rien n'est dupliqué.
-- **Les runs en cours sont ignorés** : ils seront importés à la synchronisation suivante, une fois
-  terminés. Un job tué par Slurm (limite de temps) reste `RUNNING` : `--include-running`.
-
-Interface, sur la passerelle du DCE (là où sont les runs : les fichiers y sont référencés par
-chemin absolu) :
-
-```bash
-uv run mlflow ui --backend-store-uri sqlite:///data/mlflow.db --port 5000
-```
-
-puis, sur sa machine, un tunnel SSH et http://localhost:5000 dans le navigateur :
-
-```bash
-ssh -N -L 5000:localhost:5000 dce
-```
-
-Choisir un autre port si 5000 est pris (la passerelle est partagée). Suivre un run en cours :
-`--backend-store-uri sqlite:///<dossier du run>/mlflow.db`, ou `tail -f <dossier du run>/run.log`.
-`env.mlflow=false` désactive le suivi ; `MLFLOW_TRACKING_URI` l'envoie vers un serveur.
+Pour comparer tous nos modèles : `uv run lo mlflow sync` (base d'équipe `data/mlflow.db`). Sources, relances,
+runs en cours, interface et tunnel SSH : [MLFLOW.md](MLFLOW.md). `env.mlflow=false` désactive le suivi
+(interaction avec `MLFLOW_TRACKING_URI` : [MLFLOW.md](MLFLOW.md#limites)).
 
 ## 10. Récupérer des résultats (sur sa machine)
 
@@ -219,15 +190,16 @@ uv run lo clear --help
 
 Seuls les fichiers non suivis par git sont supprimés (les `.gitkeep` de `data/` restent). La liste
 et la taille de ce qui va être supprimé sont affichées, puis une confirmation `y/n` est toujours
-demandée. Les emplacements suivent `DATA_ROOT`, `OUTPUT_ROOT`, `FEATURES_ROOT` et `MODELS_ROOT`.
+demandée. Les emplacements suivent les variables d'environnement ([DATASETS.md](DATASETS.md#variables-denvironnement)).
 Après `datasets` ou `models`, relancer la section 2.
 
 ## Pièges
 
-- **Ne pas mettre `-m` au milieu de la commande.** On le met après tous les overrides, ou avant tous.
-- **Arbre git non commité.** Un job long sur le DCE refuse de partir si des fichiers ne sont pas
-  commités (CONTRIBUTING.md). `allow_dirty=true` lève ce garde-fou, en connaissance de cause. Les smoke runs
-  ne sont pas concernés.
+- **`-m` : après tous les overrides, ou avant tous : pas au milieu.**
+- **Arbre git non commité.** `lo pretrain` et `lo train` sur le DCE (job Slurm ou session `srun`)
+  refusent de partir si des fichiers ne sont pas commités (CONTRIBUTING.md). `allow_dirty=true`
+  lève ce garde-fou, en connaissance de cause. Les configs smoke mettent `allow_dirty: true`, et
+  `lo eval` l'a à `true` par défaut (`configs/eval.yaml`).
 - **La précision.** fp16 par défaut : il marche sur tout GPU. Le bf16 exige un GPU Ampere ou plus
   récent ; sur un GPU plus ancien, le run s'arrête au démarrage. `launcher=long` ne sert que des
   GPU compatibles. Le fp16 n'est pas disponible sur CPU.

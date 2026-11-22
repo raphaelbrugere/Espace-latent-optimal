@@ -6,7 +6,7 @@
 #   lo pretrain experiment=vit_lejepa_imagenette launcher=long -m
 #
 # bf16 : exige un GPU Ampere ou plus recent (verifie au demarrage, run.py) ; launcher=long n'en
-# sert que. Duree mesuree et noeuds : slurm/README.md.
+# sert que.
 defaults:
   - override /backbone: vit_s8
   - override /data: imagenette

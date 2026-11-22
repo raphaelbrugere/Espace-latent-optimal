@@ -22,9 +22,9 @@ Head
     attribut   in_kind: "vector" | "map", la forme de sortie de neck qu'elle accepte
     forward    la sortie du neck -> sortie de la tache (voir evaluation/tasks.py)
 
-Downstream(neck, head) est ce qu'on entraine : memes `in_keys`
-que son neck, forward = head(neck(feats)). Neck et tete sont decrits par des configs nommees
-(configs/neck/, configs/head/, voir models/recipe.py) et sauvegardes separement :
+Downstream(neck, head) est ce qu'on entraine : memes `in_keys` que son neck,
+forward = head(neck(feats)). Neck et tete sont decrits par des configs nommees (configs/neck/,
+configs/head/, voir models/recipe.py) et sauvegardes separement :
 
     neck.pt   poids du neck, empreinte du backbone, empreinte du neck, nombre de parametres
     head.pt   poids de la tete seule, empreintes du backbone et du neck, nombre de parametres
@@ -96,7 +96,8 @@ class Downstream(nn.Module):
 
 @torch.no_grad()
 def check_backbone(backbone: nn.Module, size: int = 64) -> None:
-    """Echoue tot, avec un message clair, si le backbone ne respecte pas le contrat."""
+    """Echoue tot, avec un message clair, si le backbone ne respecte pas le contrat.
+    Verifiee par les tests de conformite, jamais appelee pendant un run."""
     for attr in ("feature_info", "embed_dim"):
         if not hasattr(backbone, attr):
             raise AttributeError(f"le backbone doit definir `{attr}` (voir models/contract.py)")
@@ -202,14 +203,3 @@ def make_head(make: Callable[..., nn.Module], neck: nn.Module, num_classes: int)
     """Construit une tete depuis sa config partielle : ne lui passe, parmi in_dim (sortie du
     neck) / num_classes, que ce que son constructeur demande."""
     return _call_with(make, {"in_dim": neck.out_dim, "num_classes": num_classes})
-
-
-def make_downstream(
-    neck: Callable[..., nn.Module],
-    head: Callable[..., nn.Module],
-    backbone: nn.Module,
-    num_classes: int,
-) -> Downstream:
-    """Neck puis tete, construits dans cet ordre (il fixe l'init sous une graine donnee)."""
-    built = make_neck(neck, backbone)
-    return Downstream(built, make_head(head, built, num_classes))

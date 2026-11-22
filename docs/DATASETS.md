@@ -64,7 +64,7 @@ avant usage, en particulier contre le val officiel d'Imagenette, qui est un sous
 ## Splits figés
 
 Les splits sont écrits une fois dans [`src/latentopt/data/splits/`](../src/latentopt/data/splits/), un JSON par
-dataset, deux pour Pets (segmentation, détection) (de 85 à 510 Ko, environ 1,2 Mo au total), et commités : c'est ce qui rend les scores comparables d'une
+dataset, deux pour Pets (segmentation et détection). Chacun fait quelques centaines de Ko, sous la limite de 1000 Ko du hook `check-added-large-files`. Ils sont commités : c'est ce qui rend les scores comparables d'une
 machine à l'autre. Ils sont stockés par identifiant stable, jamais par indice :
 
 | Dataset | Identifiant |
@@ -124,10 +124,8 @@ téléchargement interrompu qui a laissé un dossier incomplet n'est donc pas to
 Sur le DCE, lancer cette commande depuis la passerelle, pour ne pas occuper un GPU pendant les
 téléchargements (voir [slurm/README.md](../slurm/README.md)).
 
-`DATA_ROOT` (variable d'environnement, défaut `<racine du projet>/data/`) contient les données. Pour
-`lo pretrain`, `lo train` et `lo eval`, c'est la config qui fait foi : `env.data_root` est recopié dans
-`DATA_ROOT` au lancement (`local` et `dce` reprennent la variable d'environnement si elle est définie, `ci`
-l'ignore). Les trois sous-dossiers sont suivis par git grâce à un `.gitkeep`, leur contenu est ignoré :
+`DATA_ROOT` contient les données (variable et défaut : [Variables d'environnement](#variables-denvironnement)).
+Les trois sous-dossiers sont suivis par git grâce à un `.gitkeep`, leur contenu est ignoré :
 
 ```
 data/                         DATA_ROOT
@@ -139,6 +137,7 @@ data/                         DATA_ROOT
 ├── features/                 features mises en cache   (FEATURES_ROOT pour le déplacer)
 ├── models/                   poids externes téléchargés (MODELS_ROOT pour le déplacer)
 ├── mlflow.db                 base MLflow d'équipe, remplie par `lo mlflow sync`
+├── mlflow_artifacts/         fichiers légers des runs (config, results…), copiés par `lo mlflow sync`
 └── mlflow_hub/               bases MLflow des dépôts du Hub, téléchargées par `lo mlflow sync`
 ```
 
@@ -147,6 +146,23 @@ pas les créer à la main, torchvision prendrait un dossier vide pour un téléc
 
 Galaxy10 transite par un cache HF temporaire (`data/datasets/.hf_cache/`, ~2,5 Go) supprimé après la copie (et par `--force-download`) :
 prévoir ~5 Go libres pendant le téléchargement.
+
+## Variables d'environnement
+
+Seule liste des variables lues par le code ; les autres documents y renvoient.
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `DATA_ROOT` | `<racine du dépôt>/data` | données (arborescence ci-dessus) |
+| `FEATURES_ROOT` | `DATA_ROOT/features` | features mises en cache |
+| `MODELS_ROOT` | `DATA_ROOT/models` | poids externes téléchargés |
+| `OUTPUT_ROOT` | `<racine du dépôt>/results` | dossiers de runs (`results/`, [HUB.md](HUB.md)) ; les runs désignés par leur nom y sont cherchés, ou téléchargés |
+| `MLFLOW_TRACKING_URI` | aucun : une base MLflow par run | serveur MLflow ([MLFLOW.md](MLFLOW.md#limites)) |
+
+Pour `lo pretrain`, `lo train` et `lo eval`, c'est la config qui fait foi : `env.data_root` et
+`env.results_root` reprennent `DATA_ROOT` et `OUTPUT_ROOT` s'ils sont définis (dans les trois
+environnements, `local`, `ci` et `dce`), puis sont recopiés dans ces variables au lancement. Les autres
+commandes (`lo data prepare`, `lo clear`, `lo mlflow sync`…) lisent les variables directement.
 
 ## Données synthétiques
 

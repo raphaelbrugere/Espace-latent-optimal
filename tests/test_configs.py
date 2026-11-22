@@ -85,10 +85,16 @@ def test_smoke_train_composes():
     assert cfg.task.startswith("synthetic_") and cfg.precision == "fp32"
 
 
+@pytest.mark.parametrize(("name", "exp"), [("pretrain", "smoke"), ("train", "smoke_train")])
+def test_smoke_configs_skip_the_dirty_tree_guard(name, exp):
+    # seule exemption du garde-fou git sur le DCE (run.check_launch)
+    assert load(name, [f"experiment={exp}", "env=dce"]).allow_dirty is True
+
+
 @pytest.mark.parametrize("task", ["imagenette_cls", "pets_seg", "pets_det"])
 def test_train_composes_for_protocol_tasks(task):
     cfg = load("train", ["backbone=vit_s8", f"task={task}"])
-    assert cfg.get("head") is None and cfg.epochs is None  # recette de la baseline, remplie au run
+    assert cfg.get("head") is None and cfg.epochs is None  # remplis au run
 
 
 def test_eval_composes():
@@ -134,7 +140,7 @@ RECIPE_GROUPS = ("backbone", "method", "data", "neck", "head", "experiment")
     ids=lambda p: f"{p.parent.name}/{p.stem}",
 )  # fmt: skip
 def test_recipe_does_not_read_env(path: Path):
-    """La recette ne depend pas de la machine : aucune interpolation vers env.*"""
+    """Une config ne depend pas de la machine : aucune interpolation vers env.*"""
     assert not re.search(r"\$\{[^}]*\benv\.", path.read_text(encoding="utf-8"))
 
 
@@ -145,3 +151,77 @@ def test_backbone_config_instantiates_contract_backbone():
 
     cfg = load("train", ["backbone=vit_s8", "task=synthetic_cls", "backbone.img_size=32"])
     check_backbone(instantiate(cfg.backbone), size=32)
+
+
+# --- noms des dossiers de run (hydra.sweep.subdir), resolus depuis les yaml ---------------
+
+DATE = "20261116_183012"
+BB = f"imnt160-vit_s8-lejepa-{DATE}"
+
+
+def sweep_subdir(name: str, overrides: list[str], num: int | None = None) -> str:
+    """hydra.sweep.subdir tel que run_job le resout (config complete, noeud hydra compris)."""
+    with initialize_config_dir(config_dir=str(CONFIGS), version_base="1.3"):
+        cfg = compose(config_name=name, overrides=overrides, return_hydra_config=True)
+    if num is not None:
+        cfg.hydra.job.num = num  # job n d'un balayage -m
+    return cfg.hydra.sweep.subdir
+
+
+@pytest.fixture
+def fixed_stamp(monkeypatch):
+    from latentopt import hub
+
+    monkeypatch.setattr(hub, "_process_stamp", lambda: DATE)
+
+
+@pytest.fixture
+def pretrained(tmp_path):
+    (tmp_path / BB / "backbone").mkdir(parents=True)
+    return (tmp_path / BB).as_posix()
+
+
+NONE_BB = f"none-vit_s8-none-{DATE}/downstream"
+
+
+@pytest.mark.parametrize(
+    "overrides, num, expected",
+    [
+        # neck et tete de la baseline de la tache
+        (["task=pets_seg"], None, f"{NONE_BB}/pets_seg-fpn-conv_seg-{DATE}"),
+        # neck et tete choisis : une inversion des arguments 7 et 8 changerait le nom
+        (["task=pets_seg", "neck=embed_norm", "head=linear"], None,
+         f"{NONE_BB}/pets_seg-embed_norm-linear-{DATE}"),
+        # neck repris : son nom vient du dossier neck_from
+        (["task=pets_det", "head=soft_argmax", f"neck_from=pets_seg-fpn-conv_seg-{DATE}"], None,
+         f"{NONE_BB}/pets_det-fpn-soft_argmax-{DATE}"),
+        # backbone externe : donnees et methode dans le nom, ou backbone_run impose
+        (["backbone=vit_s8_dino", "backbone_data=imagenet1k", "backbone_method=dino",
+          "task=pets_seg"], None,
+         f"imagenet1k-vit_s8_dino-dino-{DATE}/downstream/pets_seg-fpn-conv_seg-{DATE}"),
+        (["backbone=vit_s8_dino", f"backbone_run={BB}", "task=pets_seg"], None,
+         f"{BB}/downstream/pets_seg-fpn-conv_seg-{DATE}"),
+        # job 2 d'un balayage : suffixe sur la date du dossier d'entrainement
+        (["task=pets_det"], 2, f"{NONE_BB}/pets_det-conv_trunk-soft_argmax-{DATE}_2"),
+    ],
+)  # fmt: skip
+def test_train_dir_from_config(fixed_stamp, overrides, num, expected):
+    defaults = [] if any(o.startswith("backbone=") for o in overrides) else ["backbone=vit_s8"]
+    assert sweep_subdir("train", [*defaults, *overrides], num) == expected
+
+
+def test_train_dir_from_config_of_a_pretrained_backbone(fixed_stamp, pretrained):
+    overrides = ["backbone=from_run", f"backbone.run={pretrained}", "task=pets_seg"]
+    assert sweep_subdir("train", overrides) == f"{BB}/downstream/pets_seg-fpn-conv_seg-{DATE}"
+
+
+@pytest.mark.parametrize("num, suffix", [(None, ""), (1, "_1")])
+def test_pretrain_dir_from_config(fixed_stamp, num, suffix):
+    assert sweep_subdir("pretrain", ["backbone=vit_s8"], num) == f"{BB}{suffix}/backbone"
+
+
+def test_eval_log_dir_has_the_date_of_the_eval_folders(fixed_stamp):
+    """Le journal results/.eval/<date>/ et les dossiers eval/<split>-<date>/ partagent une date."""
+    with initialize_config_dir(config_dir=str(CONFIGS), version_base="1.3"):
+        cfg = compose(config_name="eval", overrides=["downstream=x"], return_hydra_config=True)
+    assert cfg.hydra.run.dir.endswith(f"/.eval/{DATE}")

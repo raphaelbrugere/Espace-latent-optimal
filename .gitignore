@@ -20,15 +20,13 @@ multirun/
 /results/*
 !/results/.gitkeep
 lightning_logs/
-# MLflow : une base par run et la base centrale sont dans results/ (déjà ignoré) ;
-# `mlflow ui` lancé sans argument crée ces deux-là à la racine
-mlruns/
-mlflow.db
-features/
+# MLflow : bases par run dans results/, base d'équipe data/mlflow.db (déjà ignorés).
+# `mlflow ui` lancé sans argument à la racine y crée mlflow.db (ou mlruns/) et mlartifacts/.
+/mlflow.db
+/mlruns/
+/mlartifacts/
 
 # data/ : seuls les trois sous-dossiers et leur .gitkeep sont suivis.
-# Après les règles ci-dessus : la dernière règle qui s'applique l'emporte (sinon
-# `features/` ignorerait aussi data/features/).
 /data/*
 !/data/datasets/
 !/data/features/

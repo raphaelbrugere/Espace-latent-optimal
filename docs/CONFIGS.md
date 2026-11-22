@@ -13,14 +13,15 @@ Règle, vérifiée par `tests/test_configs.py` :
   et n'y lit jamais `env.*` ;
 - la machine (chemins, workers, device) est dans `env/`, qui ne change pas le résultat ;
 - les ressources demandées à Slurm (partition, durée, nœuds) sont hors de `configs/`, dans
-  [`slurm/launcher/`](../slurm/launcher/) : aucun nom de partition ni de nœud dans `configs/`.
+  [`slurm/launcher/`](../slurm/launcher/) : aucun réglage Slurm (launcher, partition, sbatch/srun)
+  dans `configs/`.
 
 ## Premier niveau : un fichier par commande
 
 | Fichier | Commande | Groupes choisis | Clés propres |
 |---|---|---|---|
-| `pretrain.yaml` | `lo pretrain` | `backbone` (obligatoire), `method` (`lejepa`), `data` (`imagenette`), `env` (`local`), `launcher`, `experiment` | `seed`, `resume`, `allow_dirty`, `trainer.*` |
-| `train.yaml` | `lo train` | `backbone` (obligatoire), `neck`, `head` (ceux de la tâche), `env`, `launcher`, `experiment` | `task` (obligatoire), `neck_from`, `seed`, `epochs`, `max_steps_per_epoch`, `batch_size`, `precision`, `optimizer.*`, `cache_features`, `backbone_run`, `backbone_data`, `backbone_method`, `resume`, `allow_dirty`, `trainer.*` |
+| `pretrain.yaml` | `lo pretrain` | `backbone` (obligatoire), `method` (`lejepa`), `data` (`imagenette`), `env` (`local`), `launcher`, `experiment` | `seed`, `experiment_name`, `resume`, `allow_dirty`, `trainer.*` |
+| `train.yaml` | `lo train` | `backbone` (obligatoire), `neck`, `head` (ceux de la tâche), `env`, `launcher`, `experiment` | `task` (obligatoire), `experiment_name`, `neck_from`, `seed`, `epochs`, `max_steps_per_epoch`, `batch_size`, `precision`, `optimizer.*`, `cache_features`, `backbone_run`, `backbone_data`, `backbone_method`, `resume`, `allow_dirty`, `trainer.*` |
 | `eval.yaml` | `lo eval` | `env`, `launcher` | `downstream` (obligatoire), `split`, `cache_features`, `precision`, `batch_size`, `experiment_name`, `allow_dirty` |
 
 ## `backbone/` : l'extracteur de features
@@ -94,7 +95,7 @@ upsample: nearest
 
 | Neck | Classe (clés) | Sortie |
 |---|---|---|
-| `embed_norm` | `EmbedNorm` (`norm` : LayerNorm, ou `embed` tel quel) | vecteur |
+| `embed_norm` | `EmbedNorm` (`norm: true` (LayerNorm) ou `false` (embed tel quel)) | vecteur |
 | `fpn` | `FPNNeck` (`channels`, `levels`, `upsample`) | carte |
 | `conv_trunk` | `ConvTrunk` (`channels`, `target_stride`) | carte |
 
@@ -119,9 +120,9 @@ du neck et de la tête sont comptés séparément dans `results.json`.
 | Clé | Rôle |
 |---|---|
 | `data_root`, `results_root` | emplacement des données et des résultats |
-| `mlflow` | base MLflow par run ; `false` = désactivé |
+| `mlflow` | base MLflow par run ; `false` = désactivé ([MLFLOW.md](MLFLOW.md#limites) pour `MLFLOW_TRACKING_URI`) |
 | `num_workers`, `device`, `progress_bar` | DataLoader, matériel, affichage |
-| `grad_checkpointing` | recalcule les activations du backbone au backward dans `lo pretrain` : ~5x moins de mémoire GPU, ~25 % plus lent, même résultat. `false` par défaut ; `auto` sur `dce` : activé sur un GPU de moins de 20 Go (la baseline en demande ~22 sans). La valeur résolue est écrite dans `backbone.grad_checkpointing` de `config.yaml` |
+| `grad_checkpointing` | recalcule les activations du backbone au backward dans `lo pretrain` : moins de mémoire GPU, plus lent, même résultat. `false` par défaut ; `auto` sur `dce` : activé sur un GPU de moins de 20 Go (pourquoi ce seuil : [slurm/README.md](../slurm/README.md#nœuds-gpu), Mémoire GPU). La valeur résolue est écrite dans `backbone.grad_checkpointing` de `config.yaml` |
 | `compile` | `torch.compile` du backbone dans `lo pretrain` : `auto` (défaut) s'il tourne sur GPU avec Triton et un compilateur C, `true` l'exige (erreur au démarrage sinon ; défaut de `dce`), `false` jamais. Au bruit numérique près, sans effet sur le résultat ; l'état réel est noté dans `results.json` (`compiled`) |
 
 Fichiers : `local.yaml` (machine personnelle), `ci.yaml` (GitHub Actions, CPU), `dce.yaml` (nœud du DCE).

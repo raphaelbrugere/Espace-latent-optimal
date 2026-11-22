@@ -19,5 +19,5 @@ hydra:
     gpus_per_node: null # pas de gres sur le DCE (voir long.yaml)
     cpus_per_task: 8
     mem_gb: 24
-    exclude: sh[10-16] # GTX 1080 Ti : sans doute plus prises en charge par torch
+    exclude: sh[10-16] # GTX 1080 Ti : non prises en charge par torch (README.md)
     array_parallelism: 1 # gpu_inter : 1 job par utilisateur

@@ -1,7 +1,7 @@
-"""Tetes downstream : chacune lit la sortie d'un neck (voir models/necks/). Un neck et une tete
-forment une recette (configs/head/, models/recipe.py)."""
+"""Tetes downstream : chacune lit la sortie d'un neck (voir models/necks/). Configs dans
+configs/head/, assemblage neck + tete dans models/recipe.py."""
 
-from latentopt.models.heads.fpn import ConvSegHead
+from latentopt.models.heads.conv_seg import ConvSegHead
 from latentopt.models.heads.linear import LinearHead
 from latentopt.models.heads.soft_argmax import SoftArgmaxDecoder
 

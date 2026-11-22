@@ -17,7 +17,7 @@ c'est fait comme ça*, et l'outillage vérifie que tout reste vrai.
 | Commentaires rares | Une décision ou un piège (`# graine unique par (split, index)`), jamais une paraphrase du code ; pas de code commenté (git s'en souvient) ; un commentaire faux est corrigé dans le même commit | relecture |
 | Pas de `TODO` orphelin | Ouvrir une issue `task` plutôt | relecture |
 | Une seule langue : le français | Code, docstrings, commentaires, doc et messages de commit | relecture |
-| ASCII seulement dans le code | `.py`, configs YAML, `pyproject.toml` : ni accents ni symboles (`->`, `<=`, pas `→`, `≤`). Sous Windows, une sortie redirigée (fichier, pipe, job) est encodée en cp1252, et un `print` non ASCII fait planter la commande. La doc (`.md`) et les templates GitHub gardent leurs accents | relecture |
+| ASCII seulement dans le code | `.py`, configs YAML, `pyproject.toml` : ni accents ni symboles (`->`, `<=`, pas `→`, `≤`). Sous Windows, une sortie redirigée (fichier, pipe, job) est encodée en cp1252, et un `print` non ASCII fait planter la commande. La doc (`.md`) et `.github/` (workflows, templates) gardent leurs accents : ils ne sont jamais exécutés sous Windows | relecture |
 | Format et lint | Formatage, imports triés, erreurs probables | ruff (pre-commit, CI `Lint`) |
 | Chaque chose à sa place | Architecture d'ensemble dans `docs/` ; pourquoi d'un changement dans le message de commit ; exemples d'usage dans les tests (documentation exécutable, qui ne peut pas devenir fausse sans que la CI le voie) | — |
 
@@ -27,11 +27,11 @@ La CI refait ces vérifications, mais un échec y coûte un aller-retour : mieux
 | Quand | Commande | Pourquoi |
 |---|---|---|
 | Une fois par clone | `uv run pre-commit install` | Format, lint et recherche de secrets à chaque commit (dépôt public : un token HF commité est exposé). Sans lui, la CI `Lint` échoue. |
-| Code modifié | `uv run pytest -m "not slow"` | Tests unitaires (~2 min) : contrat Backbone / Neck / Head, splits, noms du Hub… |
-| Chaîne `lo`, configs ou dépendances modifiées | `uv run pytest -m slow` | Smoke de bout en bout (pretrain → train → eval → mlflow sync) sur CPU : une chaîne cassée se voit ici, pas au bout d'un job de 14 h sur le DCE. |
+| Code modifié | `uv run pytest -m "not slow"` | Tests unitaires : contrat Backbone / Neck / Head, splits, noms du Hub… |
+| Chaîne `lo`, configs ou dépendances modifiées | `uv run pytest -m slow` | Smoke de bout en bout (pretrain → train → eval → mlflow sync) sur CPU : une chaîne cassée se voit ici, pas au bout d'un long job sur le DCE. |
 
 Doc seule : rien à lancer, le hook suffit. Sur GitHub, `Lint` tourne à chaque PR ; tests et
-smoke (`CI`) seulement si `src/`, `configs/`, `tests/` ou les dépendances changent.
+smoke (`CI`) seulement si `src/`, `configs/`, `tests/`, `slurm/` ou les dépendances changent.
 
 ## Expériences
 - Une expérience = un fichier dans `configs/experiment/`, mergé sur `main`.

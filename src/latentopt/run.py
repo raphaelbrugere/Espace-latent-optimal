@@ -48,6 +48,7 @@ from omegaconf import DictConfig, OmegaConf
 from latentopt import hub
 from latentopt.data.paths import PROJECT_ROOT
 from latentopt.data.splits import SPLITS_DIR
+from latentopt.mlflow_names import MLFLOW_ARTIFACTS, MLFLOW_DB, quiet_mlflow_env  # noqa: F401
 from latentopt.models.contract import count_params, weights_hash
 
 log = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ log = logging.getLogger(__name__)
 DEVICES = ("auto", "cpu", "cuda")  # env.device
 COMPILE_MODES = ("auto", True, False)  # env.compile (auto, true, false en YAML)
 GRAD_CHECKPOINTING_MODES = ("auto", True, False)  # env.grad_checkpointing
-SMALL_GPU_GB = 20  # grad_checkpointing=auto : active en dessous (baseline : ~22 Go sans)
+SMALL_GPU_GB = 20  # grad_checkpointing=auto : active en dessous (slurm/README.md)
 ACCELERATORS = {"cpu": "cpu", "cuda": "gpu"}  # device resolu -> accelerator de Lightning
 PRECISIONS = {"fp32": "32-true", "fp16": "16-mixed", "bf16": "bf16-mixed"}
 
@@ -137,16 +138,18 @@ def check_launch(cfg: DictConfig, git: dict[str, Any]) -> None:
             "env=dce hors d'un job Slurm : le run tournerait sur la passerelle. Soumettre "
             "avec launcher=long (ou short) et -m, ou lancer depuis une session srun."
         )
-    long_run = cfg.env.name == "dce" and cfg.experiment_name != "smoke"
-    if long_run and git["dirty"] and not cfg.allow_dirty:
+    # tout run sur le DCE (job Slurm ou srun) ; les configs smoke mettent allow_dirty: true
+    if cfg.env.name == "dce" and git["dirty"] and not cfg.allow_dirty:
         raise RuntimeError(
-            "job long avec un arbre git non commite (CONTRIBUTING.md) : commiter, ou "
+            "run sur le DCE avec un arbre git non commite (CONTRIBUTING.md) : commiter, ou "
             "allow_dirty=true en connaissance de cause. Fichiers : " + ", ".join(git["changed"][:5])
         )
 
 
 def lightning_settings(device: str, precision: str) -> dict[str, str]:
     """device (env) et precision (methode) de la config -> arguments du Trainer."""
+    if precision not in PRECISIONS:
+        raise ValueError(f"precision : fp32, fp16 ou bf16, recu {precision!r}")
     accelerator = ACCELERATORS[resolve_device(device)]
     if accelerator == "cpu" and precision == "fp16":
         raise ValueError("fp16 n'est pas disponible sur CPU : precision=fp32 (ou bf16)")
@@ -161,7 +164,7 @@ def bf16_problem() -> str | None:
     """None si le GPU 0 a le bf16 materiel (Ampere ou plus recent), sinon la raison.
 
     Pas torch.cuda.is_bf16_supported() : il accepte aussi un bf16 emule, des dizaines de fois
-    plus lent, et un job de 14 h deviendrait un job de plusieurs jours sans le dire.
+    plus lent, et un job de plusieurs heures deviendrait un job de plusieurs jours sans le dire.
     """
     import torch
 
@@ -180,7 +183,7 @@ def resolve_device(device: str) -> str:
     sur CPU.
     """
     if device not in DEVICES:
-        raise KeyError(device)
+        raise ValueError(f"env.device : auto, cpu ou cuda, recu {device!r}")
     if device == "cpu":
         return "cpu"
     problem = cuda_problem()
@@ -217,7 +220,7 @@ def resolve_compile(mode: bool | str, accelerator: str) -> bool:
 
 def resolve_grad_checkpointing(mode: bool | str, accelerator: str) -> bool:
     """env.grad_checkpointing (auto, true, false) -> recalculer les activations du backbone au
-    backward ou non (`lo pretrain`). Meme resultat, ~5x moins de memoire GPU, ~25 % plus lent.
+    backward ou non (`lo pretrain`). Moins de memoire GPU, plus lent, meme resultat.
 
     auto : seulement sur un GPU de moins de SMALL_GPU_GB (sans lui, la baseline manque de
     memoire sur une RTX 3080 ; il ralentit pour rien une RTX 3090). Seuil calibre sur la
@@ -276,7 +279,7 @@ def quiet_libraries() -> None:
     """Messages d'information de Lightning et MLflow masques : GPU detecte, graine, resume du
     modele, creation de la base MLflow... redisent la config ou nos propres lignes. Leurs
     avertissements et erreurs restent affiches."""
-    os.environ.setdefault("MLFLOW_LOGGING_LEVEL", "WARNING")  # si mlflow est importe apres
+    quiet_mlflow_env()  # si mlflow est importe apres
     for name in ("lightning.pytorch", "lightning.fabric", "mlflow"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
@@ -305,6 +308,32 @@ def write_config(cfg: DictConfig, run_dir: Path) -> None:
     (run_dir / "config.yaml").write_text(OmegaConf.to_yaml(cfg, resolve=True), encoding="utf-8")
 
 
+def resume_checkpoint(resume: str | None) -> Path | None:
+    """last.ckpt a reprendre (`resume=`), comme hub.locate : chemin absolu, relatif a la racine
+    du projet, ou commencant par un nom de run (`<run>/backbone/checkpoints/last.ckpt`), quel
+    que soit le dossier de lancement. Jamais telecharge. None : pas de reprise.
+
+    Le run repris ecrit dans un nouveau dossier date ; celui du checkpoint n'est pas modifie."""
+    if not resume:
+        return None
+    path = hub.locate(resume, pull=False)
+    if not path.is_file():
+        what = "n'est pas un fichier" if path.exists() else "absent"
+        raise FileNotFoundError(f"resume={resume} : checkpoint {path} {what}")
+    return path
+
+
+def resumed_from(cfg: DictConfig, ckpt: Path | None) -> str | None:
+    """Checkpoint repris, pour results.json : relatif a results_root (`<run>/.../last.ckpt`),
+    sinon absolu ; None sans reprise."""
+    if ckpt is None:
+        return None
+    try:
+        return ckpt.resolve().relative_to(Path(cfg.env.results_root).resolve()).as_posix()
+    except ValueError:
+        return ckpt.resolve().as_posix()
+
+
 def save_backbone(run_dir: Path, backbone: nn.Module, **results: Any) -> dict[str, Any]:
     """backbone.pt, README.md puis results.json (qui marque le run termine), avec
     l'empreinte des poids enregistres."""
@@ -323,17 +352,20 @@ def save_backbone(run_dir: Path, backbone: nn.Module, **results: Any) -> dict[st
     return payload
 
 
-MLFLOW_DB = "mlflow.db"
-# fichiers legers du run, joints au run dans la base centrale par `lo mlflow sync`
-MLFLOW_ARTIFACTS = ("config.yaml", "git.txt", "lineage.json", "results.json", "run.log")
-
-
 def mlflow_uri(cfg: DictConfig, run_dir: Path) -> str | None:
-    """MLFLOW_TRACKING_URI (serveur) s'il est defini, sinon la base du run ; None : desactive."""
-    os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")  # message destine aux agents IA
-    if os.environ.get("MLFLOW_TRACKING_URI"):
-        return os.environ["MLFLOW_TRACKING_URI"]
-    if not cfg.env.get("mlflow", False):
+    """MLFLOW_TRACKING_URI (serveur) s'il est defini, sinon la base du run ; None : desactive.
+
+    La variable passe avant env.mlflow : avec env.mlflow=false, le suivi va quand meme au
+    serveur, avec un avertissement."""
+    enabled = cfg.env.get("mlflow", False)
+    if uri := os.environ.get("MLFLOW_TRACKING_URI"):
+        if not enabled:
+            log.warning(
+                "env.mlflow=false ignore : MLFLOW_TRACKING_URI est defini, suivi envoye vers %s",
+                uri,
+            )
+        return uri
+    if not enabled:
         return None
     return "sqlite:///" + (run_dir.resolve() / MLFLOW_DB).as_posix()
 

@@ -13,13 +13,15 @@ Deux sources :
   Les runs des autres arrivent par le Hub, jamais en lisant leur home.
 
 Idempotent : un run est reconnu par son identifiant MLflow d'origine (tag `source_run_id`),
-le meme qu'il vienne du Hub ou d'un dossier local. Relancer n'importe que les nouveaux runs.
+le meme qu'il vienne du Hub ou d'un dossier local. Relancer n'importe que les nouveaux runs,
+et remplace une copie RUNNING dont la source s'est terminee depuis.
 Copie : parametres, metriques avec tout leur historique, tags, nom, dates, statut, et les
 fichiers legers du dossier de run (config.yaml, git.txt, lineage.json, results.json, run.log).
 
 Les runs encore en cours (RUNNING) sont ignores par defaut : un job tue par Slurm (limite
-de temps) peut rester RUNNING ; `--include-running` les importe tels quels (sans les
-reimporter ensuite).
+de temps) peut rester RUNNING ; `--include-running` les importe tels quels. Si la source
+se termine ensuite, le sync suivant met la copie RUNNING a la corbeille et reimporte le run
+complet (compteur `updated`).
 
 Commande manuelle, lancee par une seule personne a la fois : les jobs n'ecrivent jamais dans
 la base d'equipe, donc aucun conflit sur le disque reseau du DCE. Depots prives : `hf auth
@@ -29,21 +31,21 @@ Interface : MLFLOW_DISABLE_AGENT_HINT=1 uv run mlflow ui --backend-store-uri sql
 """
 
 import argparse
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # import reel dans fetch_hub : seulement si le Hub est interroge
     from huggingface_hub import HfApi
 
-os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")  # avant l'import de mlflow
+from latentopt.mlflow_names import MLFLOW_ARTIFACTS, MLFLOW_DB, quiet_mlflow_env  # noqa: E402
+
+quiet_mlflow_env()  # avant l'import de mlflow
 
 import mlflow  # noqa: E402
 from mlflow.entities import Metric, Param, ViewType  # noqa: E402
 
 from latentopt import hub  # noqa: E402
 from latentopt.data.paths import data_root  # noqa: E402
-from latentopt.run import MLFLOW_ARTIFACTS, MLFLOW_DB  # noqa: E402
 
 TERMINATED = {"FINISHED", "FAILED", "KILLED"}
 PARAMS_PER_BATCH, METRICS_PER_BATCH = 100, 1000  # limites de l'API MLflow
@@ -72,14 +74,23 @@ def source_dbs(dirs: list[Path], central: Path) -> list[Path]:
     return sorted(found - {central.resolve()})
 
 
-def imported(client: mlflow.MlflowClient) -> set[str]:
-    """Identifiants d'origine (source_run_id) des runs deja presents dans la base centrale."""
-    done, token = set(), None
+def imported(client: mlflow.MlflowClient) -> dict[str, tuple[str, str | None]]:
+    """source_run_id -> (identifiant central, statut) des runs deja presents dans la base
+    centrale. Un run supprime compte comme present (jamais reimporte), avec le statut None ;
+    s'il a aussi une copie active, c'est elle qui figure."""
+    done, token = {}, None
     exps = [e.experiment_id for e in client.search_experiments(view_type=ViewType.ALL)]
     while exps:
         page = client.search_runs(exps, run_view_type=ViewType.ALL, max_results=1000,
                                   page_token=token)  # fmt: skip
-        done |= {r.data.tags["source_run_id"] for r in page if "source_run_id" in r.data.tags}
+        for r in page:
+            source = r.data.tags.get("source_run_id")
+            if source is None:
+                continue
+            if r.info.lifecycle_stage == "active":
+                done[source] = (r.info.run_id, r.info.status)
+            else:
+                done.setdefault(source, (r.info.run_id, None))
         token = page.token
         if not token:
             break
@@ -135,24 +146,32 @@ def copy_run(
 
 def sync(dirs: list[Path], central: Path, include_running: bool = False) -> dict:
     """Importe les nouveaux runs des bases trouvees sous `dirs` ; renvoie les compteurs
-    (imported, present, running). Un run present dans plusieurs bases n'est importe qu'une fois."""
+    (imported, updated, present, running). Un run present dans plusieurs bases n'est importe
+    qu'une fois. updated : copie centrale RUNNING dont la source est terminee, mise a la
+    corbeille MLflow et remplacee par une copie complete."""
     central.parent.mkdir(parents=True, exist_ok=True)
     artifacts = central.with_name(central.stem + "_artifacts")
-    counts = {"imported": 0, "present": 0, "running": 0}
+    counts = {"imported": 0, "updated": 0, "present": 0, "running": 0}
     dst = mlflow.MlflowClient(sqlite_uri(central))
     done = imported(dst)
     for db in source_dbs(dirs, central):
         src = mlflow.MlflowClient(sqlite_uri(db))
         for exp in src.search_experiments(view_type=ViewType.ALL):
             for run in src.search_runs([exp.experiment_id], run_view_type=ViewType.ALL):
-                if run.info.run_id in done:
+                copy, status = done.get(run.info.run_id, (None, None))
+                if copy and status == "RUNNING" and run.info.status in TERMINATED:
+                    dst.delete_run(copy)  # copie figee en cours de run : remplacee
+                    new = copy_run(src, dst, run, exp.name, db, artifacts)
+                    done[run.info.run_id] = (new, run.info.status)
+                    counts["updated"] += 1
+                elif copy:
                     counts["present"] += 1
                 elif run.info.status not in TERMINATED and not include_running:
                     counts["running"] += 1
                     print(f"en cours, ignore : {exp.name} - {run.info.run_name} ({db})")
                 else:
-                    copy_run(src, dst, run, exp.name, db, artifacts)
-                    done.add(run.info.run_id)
+                    new = copy_run(src, dst, run, exp.name, db, artifacts)
+                    done[run.info.run_id] = (new, run.info.status)
                     counts["imported"] += 1
     return counts
 
@@ -175,7 +194,8 @@ def main(argv: list[str] | None = None) -> None:
         dirs.append(cache)
     counts = sync(dirs, args.db, args.include_running)
     print(f"{counts['imported']} importes, {counts['present']} deja presents, "
-          f"{counts['running']} en cours ignores -> {args.db}")  # fmt: skip
+          f"{counts['running']} en cours ignores, {counts['updated']} mis a jour "
+          f"-> {args.db}")  # fmt: skip
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
 from latentopt import hub
+from latentopt.data.datasets.base import abbrev
 from latentopt.evaluation.features import AUTOCAST, CachedFeatures, collate, load_or_extract
 from latentopt.evaluation.tasks import Task, get_task, to_device, to_float
 from latentopt.models import recipe
@@ -69,7 +70,8 @@ def backbone_info(run_cfg: Any) -> dict[str, Any]:
         pre_dir = resolve_run(run_cfg.backbone.run)
         pre = json.loads((pre_dir / "results.json").read_text(encoding="utf-8"))
         pre_cfg = OmegaConf.load(pre_dir / "config.yaml")
-        data = pre_cfg.data.source._target_.split(".")[-2]
+        # nom court, comme les noms de runs et le tag data
+        data = abbrev(pre_cfg.data.source._target_)
         return {"reference": False, "gpu_hours": pre.get("gpu_hours"), "pretraining_data": data}
     if ".external." in target:
         return {"reference": True, "gpu_hours": None, "pretraining_data": target.split(".")[-1]}
@@ -92,18 +94,19 @@ def load_trained(
     ckpt = torch.load(head_dir / "head.pt", map_location="cpu", weights_only=False)
     neck_pt = neck_folder(head_dir, ckpt["neck_dir"]) / "neck.pt"
     neck_ckpt = torch.load(neck_pt, map_location="cpu", weights_only=False)
-    neck = recipe.build_neck(OmegaConf.create(neck_ckpt["config"]), backbone)
+    model = recipe.build(
+        OmegaConf.create(neck_ckpt["config"]), cfg.head, backbone, task.num_classes
+    )
     issues = []
     try:
-        load_neck(neck, neck_pt, backbone)
+        load_neck(model.neck, neck_pt, backbone)
     except ValueError as e:
         issues.append(str(e))
-    head = recipe.build_head(cfg.head, neck, task.num_classes)
     try:
-        load_head(head, head_dir / "head.pt", backbone, neck)
+        load_head(model.head, head_dir / "head.pt", backbone, model.neck)
     except ValueError as e:
         issues.append(str(e))
-    return Downstream(neck, head), ckpt, issues
+    return model, ckpt, issues
 
 
 def evaluate_downstream(

@@ -10,10 +10,10 @@ defaults:
 
 env:
   name: dce
-  num_workers: 6 # 8 coeurs par noeud : en laisser pour le processus principal
+  num_workers: 6 # moins que les coeurs du noeud, pour laisser de la place au processus principal (coeurs par noeud : slurm/README.md)
   device: cuda
   progress_bar: false # la barre de progression pollue les logs Slurm ; suivre run.log
   grad_checkpointing: auto # indispensable sur 10 Go, inutile sur 24 Go (slurm/README.md)
   # tous les runs du DCE compiles ; sinon arret au demarrage plutot qu'un job plus lent en eager.
-  # gcc et Triton verifies sur tx08 le 2026-11-21.
+  # gcc et Triton : verification dans slurm/README.md.
   compile: true

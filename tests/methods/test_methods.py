@@ -128,7 +128,7 @@ def frozen(pyramid, recipe_head):
 def test_frozen_backbone_stays_in_eval_and_without_grad(frozen):
     frozen.train()
     assert not frozen.backbone.training
-    assert frozen.head.training
+    assert frozen.downstream.training
     assert not any(p.requires_grad for p in frozen.backbone.parameters())
 
 
@@ -150,16 +150,19 @@ def test_frozen_neck_stays_fixed_and_only_the_head_learns(pyramid, recipe_head):
     head = recipe_head("linear", pyramid, 10)
     module = FrozenBackboneModule(pyramid, head, get_task("synthetic_cls"), freeze_neck=True)
     module.train()
-    assert not module.head.neck.training and module.head.head.training
-    assert not any(p.requires_grad for p in module.head.neck.parameters())
+    assert not module.downstream.neck.training and module.downstream.head.training
+    assert not any(p.requires_grad for p in module.downstream.neck.parameters())
     opt = torch.optim.SGD([p for p in module.parameters() if p.requires_grad], lr=1.0)
-    neck_before, head_before = weights_hash(module.head.neck), weights_hash(module.head.head)
+    neck_before, head_before = (
+        weights_hash(module.downstream.neck),
+        weights_hash(module.downstream.head),
+    )
     x, y = torch.randn(4, 3, 32, 32), torch.tensor([0, 1, 2, 3])
     opt.zero_grad()
     module.training_step((x, y), 0).backward()
     opt.step()
-    assert weights_hash(module.head.neck) == neck_before
-    assert weights_hash(module.head.head) != head_before
+    assert weights_hash(module.downstream.neck) == neck_before
+    assert weights_hash(module.downstream.head) != head_before
 
 
 def test_frozen_same_loss_on_images_and_cached_features(frozen):

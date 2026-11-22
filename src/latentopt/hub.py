@@ -147,6 +147,7 @@ def eval_name(split: str, date: str) -> str:
 
 
 def parse_eval(name: str) -> EvalName:
+    """Inverse de eval_name ; utilisee par les tests et les outils, jamais pendant un run."""
     return EvalName(*_split(name, 2, "<split>-<date>"))
 
 
@@ -173,14 +174,14 @@ def run_root(path: str | Path) -> Path:
 
 
 def backbone_run(
-    choice: str, run: str = "", override: str = "", data: str = "", method: str = ""
+    choice: str, run: str = "", forced: str = "", data: str = "", method: str = ""
 ) -> str:
-    """Nom du backbone d'un run de `lo train` : `backbone_run` s'il est donne, celui du
-    run de pre-entrainement (backbone=from_run), sinon un nouveau nom date a partir de
-    `backbone_data` et `backbone_method` (backbone externe ou aleatoire)."""
-    if _given(override):
-        parse(override)
-        return override
+    """Nom du backbone d'un run de `lo train` : `forced` (nom impose par l'utilisateur) s'il est
+    donne, celui du run de pre-entrainement (backbone=from_run), sinon un nouveau nom date a
+    partir de `backbone_data` et `backbone_method` (backbone externe ou aleatoire)."""
+    if _given(forced):
+        parse(forced)
+        return forced
     if _given(run):
         return run_root(locate(run, pull=False)).name
     return run_name(data, choice, method)
@@ -197,7 +198,7 @@ def default_pair(task: str) -> tuple[str, str]:
 def train_dir(
     choice: str,
     run: str,
-    override: str,
+    forced: str,
     data: str,
     method: str,
     task: str,
@@ -207,14 +208,15 @@ def train_dir(
     num: int | str | None = None,
 ) -> str:
     """Dossier d'un run de `lo train` sous results/ : <run>/downstream/<tache>-<neck>-<tete>-<date>
-    (resolver de configs/train.yaml). Neck ou tete non choisis : ceux de la baseline de la
-    tache ; avec `neck_from`, le neck est celui du dossier repris."""
+    (resolver de configs/train.yaml, qui passe les arguments dans cet ordre). <run> : voir
+    `backbone_run` (choice, run, forced, data, method). Neck ou tete non choisis : ceux
+    de la baseline de la tache ; avec `neck_from`, le neck est celui du dossier repris."""
     if _given(neck_from):
         neck = parse_downstream(Path(str(neck_from)).name).neck
     default_neck, default_head = default_pair(task)
     neck = neck if _given(neck) else default_neck
     head = head if _given(head) else default_head
-    name = backbone_run(choice, run, override, data, method)
+    name = backbone_run(choice, run, forced, data, method)
     return f"{name}/{DOWNSTREAM}/{downstream_name(task, neck, head, stamp(num))}"
 
 

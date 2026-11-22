@@ -27,8 +27,8 @@ hydra:
   # config de premier niveau peut etendre le chemin de recherche de Hydra.
   searchpath:
     - file://${project_root:}/slurm
-  run: # journal du lancement seulement : les resultats vont dans eval/ de chaque entrainement
-    dir: ${env.results_root}/.eval/${now:%Y%m%d_%H%M%S}
+  run: # journal du lancement (run.log) seulement : les resultats vont dans eval/ de chaque entrainement
+    dir: ${env.results_root}/.eval/${run_stamp:}
   sweep:
     dir: ${hydra.run.dir}
     subdir: ${hydra.job.num}

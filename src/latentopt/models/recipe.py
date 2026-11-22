@@ -50,6 +50,7 @@ def build_head(cfg: DictConfig, neck: nn.Module, num_classes: int) -> nn.Module:
 
 
 def build(neck: DictConfig, head: DictConfig, backbone: nn.Module, num_classes: int) -> Downstream:
-    """Neck puis tete, construits dans cet ordre (il fixe l'init sous une graine donnee)."""
+    """Neck puis tete, construits dans cet ordre (il fixe l'init sous une graine donnee).
+    Utilise par lo train et lo eval ; un neck repris se charge ensuite (load_neck)."""
     built = build_neck(neck, backbone)
     return Downstream(built, build_head(head, built, num_classes))

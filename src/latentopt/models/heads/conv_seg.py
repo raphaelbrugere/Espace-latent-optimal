@@ -1,9 +1,9 @@
-"""Tete de segmentation semantique du decodeur FPN (Lin et al., 2017).
+"""Tete de segmentation semantique (config `conv_seg`, configs/head/conv_seg.yaml), issue du
+decodeur FPN (Lin et al., 2017).
 
-Recette `fpn` (configs/head/fpn.yaml) : neck `FPNNeck`, qui fusionne les cartes du backbone,
-puis cette tete, qui en fait des logits par pixel. La sortie est au stride le plus fin de
-`feature_info` ; le passage a la resolution cible (bilineaire) est laisse a la loss et a la
-metrique.
+Elle lit les cartes fusionnees par un neck (`FPNNeck`, config `fpn`) et en fait des logits
+par pixel. La sortie est au stride le plus fin de `feature_info` ; le passage a la
+resolution cible (bilineaire) est laisse a la loss et a la metrique.
 """
 
 import torch.nn as nn

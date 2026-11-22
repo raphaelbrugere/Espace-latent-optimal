@@ -5,6 +5,7 @@
     |-- features/    features mises en cache    (FEATURES_ROOT pour le deplacer)
     |-- models/      poids externes telecharges (MODELS_ROOT pour le deplacer)
     |-- mlflow.db    base MLflow d'equipe, remplie par `lo mlflow sync`
+    |-- mlflow_artifacts/  fichiers legers des runs (config...), copies par `lo mlflow sync`
     `-- mlflow_hub/  bases MLflow des depots du Hub, telechargees par `lo mlflow sync`
 
 La racine est deduite de l'emplacement du paquet : valable en installation editable

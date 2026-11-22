@@ -55,10 +55,11 @@ Tout le monde (local, CI, DCE) utilise exactement les mêmes versions :
 
 Pour changer une version : modifier le fichier concerné dans une PR, puis `uv self update <version>` (uv) ou `uv sync` (Python, bibliothèques) sur chaque machine.
 
-Deux versions sont écrites à deux endroits, à garder identiques à la main :
+Ces versions sont écrites à plusieurs endroits, à garder identiques à la main :
 
-- **ruff** : dans `uv.lock` (`uv run ruff`, et l'extension VS Code grâce à `"ruff.importStrategy": "fromEnvironment"` dans `.vscode/settings.json` ; sans ce réglage, elle utiliserait sa propre copie) et dans `.pre-commit-config.yaml` (hooks, CI). Si elles divergent, le formatage de l'éditeur et celui de la CI peuvent différer. Pour changer : `uv add --dev "ruff==<version>"` et le `rev` du hook `ruff-pre-commit`.
+- **ruff** : dans `uv.lock` (`uv run ruff`, et l'extension VS Code grâce à `"ruff.importStrategy": "fromEnvironment"` dans `.vscode/settings.json` ; sans ce réglage, elle utiliserait sa propre copie) et dans `.pre-commit-config.yaml` (hooks, CI). Si elles divergent, le formatage de l'éditeur et celui de la CI peuvent différer. Pour changer : `uv add --dev "ruff>=<version>"`, puis le même numéro dans le `rev` du hook `ruff-pre-commit` (`uv.lock` fixe la version exacte).
 - **uv** : dans `pyproject.toml` et dans les commandes d'installation de ce fichier (étape 1) et de `slurm/README.md` (étape 4).
+- **Python** : dans `.python-version`, et cité dans ce fichier (étape 3) et dans `slurm/README.md` (étape 5). Pour changer : modifier `.python-version`, ces deux mentions, puis `uv sync`.
 - **Triton** : sous Linux, `triton` est une dépendance de torch (version dans `uv.lock`) ; sous Windows, `triton-windows` est déclaré dans `pyproject.toml`. Quand torch change, aligner la fourchette de `triton-windows` sur la majeure.mineure de `triton` dans `uv.lock`, puis `uv lock`.
 
 ## Ce que font les extensions VS Code

@@ -5,7 +5,8 @@
 #   lo pretrain experiment=<nom> launcher=long -m      # job Slurm (slurm/README.md)
 #
 # Chaque run ecrit dans results/<donnees>-<archi>-<methode>-<AAAAMMJJ_HHMMSS>/backbone/ :
-# backbone.pt, README.md, config, run.log, metriques. <donnees> est le nom court (ABBREV) du
+# backbone.pt, results.json (ecrit en dernier) et les fichiers communs a tout run (liste complete :
+# docs/HUB.md#un-dossier-par-backbone). <donnees> est le nom court (ABBREV) du
 # module du dataset, ex. imnt160 : il est dans le code, pas dans les configs.
 # <donnees>-<archi>-<methode>-<date> est le dossier du backbone, de ses entrainements
 # downstream et de leurs evaluations, et son depot Hugging Face (docs/HUB.md).
@@ -21,8 +22,8 @@ defaults:
 
 experiment_name: default # chaque fichier de configs/experiment/ le redefinit
 seed: 0
-resume: null # chemin d'un last.ckpt pour reprendre un run interrompu
-allow_dirty: false # true : autorise un job long sur le DCE avec un arbre git non commite
+resume: null # last.ckpt d'un run interrompu ; nouveau dossier date (docs/COMMANDS.md)
+allow_dirty: false # true : autorise un run sur le DCE (job ou session interactive) avec un arbre git non commite
 
 trainer: # reglages du Trainer sans effet sur le resultat de l'entrainement
   limit_val_batches: null # entier : sonde evaluee sur une partie du val (smoke run)

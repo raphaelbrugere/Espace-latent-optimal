@@ -31,19 +31,20 @@ lo = "latentopt.cli:main"
 latentopt = "latentopt.cli:main"
 
 [build-system]
-requires = ["uv_build>=0.11.27,<0.12.0"]
+requires = ["uv_build>=0.13.7,<0.14"]
 build-backend = "uv_build"
 
 [tool.uv]
-# Versions figees pour tous (local, CI, DCE) : uv refuse de tourner dans une autre version.
-# Mise a jour : changer ici, dans .python-version, puis `uv self update <version>` partout.
+# Version de uv figee pour tous (local, CI, DCE) : uv refuse de tourner dans une autre version.
+# Mise a jour : changer ici, dans INSTALL.md (etape 1) et slurm/README.md (etape 4), puis
+# `uv self update <version>` partout. Python : .python-version, puis `uv sync`.
 required-version = "==0.13.7"
 # Python telecharge par uv (version exacte de .python-version), jamais celui du systeme :
 # le DCE fournit 3.12.3, Windows celui installe a la main.
 python-preference = "only-managed"
 
 # torch depuis l'index PyTorch partout : sur PyPI, la wheel Windows est CPU uniquement.
-# cu132 = CUDA de la wheel PyPI Linux de torch 2.15 (driver DCE 610 -> CUDA <= 13.3).
+# cu132 = CUDA de torch 2.15 (uv.lock) ; drivers du DCE : slurm/README.md.
 [[tool.uv.index]]
 name = "pytorch-cu132"
 url = "https://download.pytorch.org/whl/cu132"

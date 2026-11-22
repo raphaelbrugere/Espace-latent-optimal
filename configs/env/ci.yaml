@@ -1,5 +1,5 @@
 # @package _global_
-# GitHub Actions : CPU, pas de worker (runner a 2 coeurs), donnees synthetiques uniquement.
+# GitHub Actions : CPU, pas de worker, donnees synthetiques uniquement.
 defaults:
   - _base
   - _self_

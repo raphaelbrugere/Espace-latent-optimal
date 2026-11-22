@@ -20,6 +20,6 @@ hydra:
     # --gpus-per-node fait echouer sbatch (" Invalid generic resource (gres) specification ").
     gpus_per_node: null
     cpus_per_task: 8
-    mem_gb: 24 # noeuds a 30 Go de RAM ; a ajuster si un job reste en attente
-    exclude: sh[10-16] # GTX 1080 Ti : pas de bf16, sans doute plus prises en charge par torch
+    mem_gb: 24 # (RAM des noeuds : slurm/README.md) ; a ajuster si un job reste en attente
+    exclude: sh[10-16] # GTX 1080 Ti : pas de bf16, non prises en charge par torch (README.md)
     array_parallelism: 4 # jobs simultanes d'un balayage : la limite par utilisateur de la partition

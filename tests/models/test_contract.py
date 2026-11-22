@@ -165,26 +165,30 @@ def test_head_refuses_another_neck(pyramid, tmp_path, recipe_head):
         contract.load_head(fresh.head, tmp_path / "head.pt", pyramid, fresh.neck)
 
 
-# --- make_neck / make_head / make_downstream ---------------------------------------------
+# --- make_neck / make_head ---------------------------------------------------------------
 
 
-def test_make_downstream_passes_only_requested_arguments(pyramid):
-    probe = contract.make_downstream(EmbedNorm, LinearHead, pyramid, num_classes=4)
-    assert probe.head.fc.in_features == pyramid.embed_dim and probe.head.fc.out_features == 4
-
-    fpn = contract.make_downstream(FPNNeck, ConvSegHead, pyramid, num_classes=3)
-    assert fpn.neck.names == ["c4", "c8"]
-
-    det = contract.make_downstream(ConvTrunk, SoftArgmaxDecoder, pyramid, num_classes=2)
-    assert det.head.classifier.out_features == 2
+def make_pair(make_neck, make_head, backbone, num_classes):
+    neck = contract.make_neck(make_neck, backbone)
+    return neck, contract.make_head(make_head, neck, num_classes)
 
 
-def test_make_downstream_works_with_hydra_partials(pyramid):
+def test_make_neck_and_head_pass_only_requested_arguments(pyramid):
+    _, probe = make_pair(EmbedNorm, LinearHead, pyramid, num_classes=4)
+    assert probe.fc.in_features == pyramid.embed_dim and probe.fc.out_features == 4
+
+    fpn, _ = make_pair(FPNNeck, ConvSegHead, pyramid, num_classes=3)
+    assert fpn.names == ["c4", "c8"]
+
+    _, det = make_pair(ConvTrunk, SoftArgmaxDecoder, pyramid, num_classes=2)
+    assert det.classifier.out_features == 2
+
+
+def test_make_neck_and_head_work_with_hydra_partials(pyramid):
     from functools import partial
 
-    neck = partial(FPNNeck, channels=8, levels=["c8"])
-    head = contract.make_downstream(neck, ConvSegHead, pyramid, 3)
-    assert head.neck.names == ["c8"] and head.head.logits.in_channels == 8
+    neck, head = make_pair(partial(FPNNeck, channels=8, levels=["c8"]), ConvSegHead, pyramid, 3)
+    assert neck.names == ["c8"] and head.logits.in_channels == 8
 
 
 def test_make_head_reads_the_neck_output_width(pyramid):

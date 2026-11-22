@@ -1,5 +1,5 @@
 # @package _global_
-# Smoke run : verifie le pipeline de bout en bout en ~1 min (CPU), avant tout job long.
+# Smoke run : verifie le pipeline de bout en bout (CPU), avant tout job long.
 # Donnees synthetiques, scores sans signification.
 #
 #   lo pretrain experiment=smoke
@@ -9,6 +9,7 @@ defaults:
   - override /data: synthetic
 
 experiment_name: smoke
+allow_dirty: true # smoke run : pas de garde-fou git sur le DCE (run.check_launch)
 
 method:
   num_views: 2

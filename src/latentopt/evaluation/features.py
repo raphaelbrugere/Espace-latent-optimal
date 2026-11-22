@@ -13,8 +13,9 @@ recalculer le backbone a chaque epoch.
   temporaire puis renomme. Un job ne lit donc jamais un fichier a moitie ecrit ; au pire,
   deux jobs extraient la meme chose.
 
-- Cles : seules les entrees lues par la tete (`head.in_keys`) sont stockees : `embed`
-  pese ~2 Ko par image, les 4 cartes d'un ViT-S/8 en 128px ~0,8 Mo (fp16).
+- Cles : seules les entrees lues par le neck (`neck.in_keys`, reprises par
+  `Downstream.in_keys`) sont stockees : `embed` pese ~2 Ko par image, les 4 cartes d'un
+  ViT-S/8 en 128px ~0,8 Mo (fp16).
 - Augmentation : le retournement horizontal de la baseline (seg, det) ne commute pas avec
   le backbone. Les deux variantes (jamais / toujours retournee) sont donc extraites, et
   `CachedFeatures` tire a pile ou face a chaque passage, avec la probabilite du transform.

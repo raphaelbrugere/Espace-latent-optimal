@@ -8,8 +8,8 @@ Ce dossier contient tout ce qui est propre au DCE et à Slurm, et rien d'autre :
 
 Règle du dépôt : ce qui change le résultat d'un run est dans `configs/` (hors `env/`) ; la
 machine (chemins, workers, device) est dans `configs/env/` ; les ressources demandées à Slurm
-(partition, durée, nœuds) sont ici. Aucun nom de partition ni de nœud dans `configs/` ni dans
-`src/` : `tests/test_configs.py` le vérifie.
+(partition, durée, nœuds) sont ici. Aucun réglage Slurm (launcher, partition, sbatch/srun) dans
+`configs/` : `tests/test_configs.py` le vérifie.
 Tout se fait à la main, dans l'ordre ci-dessous. `<login>` est l'identifiant reçu par mail.
 
 - Documentation officielle : https://dce.pages.centralesupelec.fr/
@@ -113,7 +113,7 @@ uv run lo data prepare               # tous les datasets
 uv run lo data prepare imagenette    # ou une partie seulement
 ```
 
-Les datasets vont dans `DATA_ROOT/datasets`. Par défaut `DATA_ROOT` est `<racine du dépôt>/data`, dans le home, qui est accessible depuis tous les nœuds.
+Les datasets vont dans `DATA_ROOT/datasets` (défaut : [docs/DATASETS.md](../docs/DATASETS.md#variables-denvironnement)). Par défaut, c'est dans le home, qui est accessible depuis tous les nœuds.
 
 ### 8. Vérifier sur un nœud GPU
 
@@ -205,8 +205,11 @@ hydra:
 
 - **Coût** : les heures GPU d'un balayage se multiplient par le nombre de jobs, sur le fairshare
   commun (voir [Partitions](#partitions)). Faire un smoke test d'abord.
-- **Noms** : les jobs d'un balayage partagent la date de soumission, suivie de `_1`, `_2`… Les
-  valeurs balayées ne sont pas dans le nom : les retrouver dans MLflow (config complète).
+- **Noms** : sur Slurm, chaque job prend la date de son propre démarrage (le nom est résolu sur
+  le nœud), suivie de `_1`, `_2`… pour les jobs 1, 2… En local, les jobs d'un `-m` partagent la
+  même date. Les valeurs balayées ne sont pas dans le nom : les retrouver dans MLflow (config
+  complète). Pour que des `lo train` rangent leurs têtes sous le même backbone, fixer
+  `backbone_run` ([docs/HUB.md](../docs/HUB.md)).
 - **Têtes en parallèle sur un même backbone** : sans risque, le cache de features est partagé
   entre jobs simultanés (`evaluation/features.py`).
 
@@ -306,13 +309,13 @@ GPU d'après la documentation officielle, partitions d'après le relevé. CPU : 
 | `tx00`–`tx16` | RTX 2080 Ti (Turing) | 11 Go | Xeon W-2125 (W-2225 pour `tx05`), 8 cœurs | `gpu_inter`, et `gpu_prod_night` pour `tx09`–`tx16` |
 | `dani01`–`dani17` | RTX 5080 (Blackwell) | 16 Go | Xeon w3-2423, 12 cœurs | `gpu_inter`, `gpu_prod_night` |
 
-Lors du relevé, `sh01`–`sh16` étaient en maintenance (`drain`) : seuls 6 nœuds servaient `gpu_prod_long`.
+Lors du relevé, `sh01`–`sh16` étaient en maintenance (`drain`) : seuls les nœuds `sh00` et `sh17`–`sh22` servaient `gpu_prod_long`.
 
 Les deux profils excluent donc les GTX 1080 Ti (`exclude: sh[10-16]`).
 
 Choix de la précision :
-- **`16-mixed` (fp16) par défaut** : marche sur tous les nœuds.
-- **`bf16-mixed`** exige une Ampere ou une Blackwell (capacité de calcul ≥ 8.0) : RTX 3090, 3080, 5080. Avec `launcher=long`, c'est garanti (3090 et 3080 seulement). Sur un autre GPU, `lo` s'arrête au démarrage, plutôt qu'un bf16 émulé, beaucoup plus lent.
+- **`fp16` par défaut** : marche sur tous les nœuds.
+- **`bf16`** exige une Ampere ou une Blackwell (capacité de calcul ≥ 8.0) : RTX 3090, 3080, 5080. Avec `launcher=long`, c'est garanti (3090 et 3080 seulement). Sur un autre GPU, `lo` s'arrête au démarrage, plutôt qu'un bf16 émulé, beaucoup plus lent.
 
 Mémoire GPU : 24 Go sur une RTX 3090, 10 Go sur une RTX 3080, toutes deux servies par `gpu_prod_long`. Sans `grad_checkpointing`, la baseline ne tient pas sur une RTX 3080 (plus de 9,6 Go dès le premier pas sur `sh00`). `env=dce` met `grad_checkpointing: auto` : activé sur un GPU de moins de 20 Go (3080, 2080 Ti, 5080), désactivé au-delà (3090). Effet sur les ressources : voir [Réglages de `env`](#réglages-de-env-et-ressources).
 
@@ -338,10 +341,6 @@ D'après la documentation officielle (OS : Ubuntu 18.04 ou 20.04 ; disque local 
 | `chome` | passerelle | 2 × Xeon Silver 4214R (12 cœurs, Cascade Lake) | 64 Go |
 | `kyle01`–`kyle68` | calcul CPU | 2 × Xeon Silver 4110 (8 cœurs, Skylake) | 64 Go |
 | `sar01`–`sar32` | calcul CPU | 2 × Xeon E5-2637 v3 (4 cœurs, Haswell) | 32 Go |
-
-## À compléter
-
-- Variables d'environnement lues par le code : `DATA_ROOT` (défaut `<racine du dépôt>/data`), `FEATURES_ROOT` (défaut `DATA_ROOT/features`), `MODELS_ROOT` (défaut `DATA_ROOT/models`). `OUTPUT_ROOT` : `lo pretrain`, `lo train` et `lo eval` la fixent à `env.results_root`, et `latentopt.hub` y cherche (ou télécharge) les runs désignés par leur nom (défaut `<racine du dépôt>/results`). Pas encore utilisée : `ENV_ROOT`.
 
 ## Citation
 

@@ -7,6 +7,7 @@ defaults:
   - override /backbone: vit_s8
 
 experiment_name: smoke
+allow_dirty: true # smoke run : pas de garde-fou git sur le DCE (run.check_launch)
 task: synthetic_cls
 epochs: 2
 max_steps_per_epoch: 3
