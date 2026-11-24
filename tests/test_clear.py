@@ -23,6 +23,9 @@ def roots(tmp_path, monkeypatch):
     monkeypatch.delenv("MODELS_ROOT", raising=False)
     monkeypatch.setenv("OUTPUT_ROOT", str(results))
     monkeypatch.setattr(clear, "tracked", set)
+    # sinon les cibles mlflow et cache visent la vraie racine du depot
+    monkeypatch.setattr(clear, "PROJECT_ROOT", tmp_path / "project")
+    (tmp_path / "project").mkdir()
     return data, results
 
 
@@ -37,6 +40,17 @@ def test_target_clears_only_the_given_targets(roots, monkeypatch):
     assert [p.name for p in (data / "datasets").iterdir()] == [".gitkeep"]
     assert not (data / "mlflow.db").exists() and not (data / "mlflow_artifacts").exists()
     assert (data / "features" / "run1").exists() and (results / "synth-run").exists()
+
+
+def test_mlflow_also_clears_mlflow_ui_leftovers_at_root(roots, monkeypatch):
+    project = clear.PROJECT_ROOT
+    (project / "mlruns").mkdir()
+    (project / "mlflow.db").write_bytes(b"db")
+    (project / ".ruff_cache").mkdir()
+    answer(monkeypatch, "y")
+    assert clear.main(["--target", "mlflow"]) == 0
+    assert not (project / "mlruns").exists() and not (project / "mlflow.db").exists()
+    assert (project / ".ruff_cache").exists()
 
 
 def test_all_clears_every_target(roots, monkeypatch):

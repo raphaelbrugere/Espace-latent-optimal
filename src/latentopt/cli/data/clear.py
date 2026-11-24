@@ -10,8 +10,9 @@ Cibles (emplacements resolus comme le reste du code, variables d'environnement c
     datasets  DATA_ROOT/datasets : re-telecharges par `lo data prepare`
     features  features en cache (FEATURES_ROOT, defaut DATA_ROOT/features) : recalculees
     models    poids externes (MODELS_ROOT, defaut DATA_ROOT/models) : `lo data prepare`
-    mlflow    DATA_ROOT/mlflow.db, mlflow_hub/, mlflow_artifacts/ : `lo mlflow sync`
-    cache     caches Python et outils, sorties Hydra/Lightning/MLflow a la racine du projet
+    mlflow    DATA_ROOT/mlflow.db, mlflow_hub/, mlflow_artifacts/ : `lo mlflow sync` ;
+              et mlflow.db, mlruns/, mlartifacts/ laisses a la racine par `mlflow ui`
+    cache     caches Python et outils, sorties Hydra/Lightning a la racine du projet
 
 Seuls les fichiers non suivis par git sont supprimes : tout chemin suivi, ou qui contient un
 fichier suivi (ex. les .gitkeep de data/), est ecarte ; les dossiers de data/ sont vides, jamais
@@ -23,17 +24,25 @@ toujours demandee : sans reponse `y`, rien n'est supprime.
 import argparse
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from latentopt.data.paths import PROJECT_ROOT, data_root, datasets_root, features_root, models_root
 from latentopt.hub import results_root
 
 KEEP = {".gitkeep"}
-# a la racine du projet ; __pycache__ est cherche partout sauf dans SKIP
+# Crees a la racine du projet par les outils (pytest, ruff, mypy, Hydra, Lightning), pas par le code
 ROOT_CACHES = [".pytest_cache", ".ruff_cache", ".mypy_cache", "outputs", "multirun",
-               "lightning_logs", "mlruns", "mlflow.db"]  # fmt: skip
-SKIP = {".venv", ".git"}
+               "lightning_logs"]  # fmt: skip
+# Crees a la racine par `mlflow ui` lance sans argument
+ROOT_MLFLOW = ["mlflow.db", "mlruns", "mlartifacts"]
+# Pas de recherche de __pycache__ ici : .venv est gere par uv, data/ et results/ sont trop gros
+# pour etre parcourus en entier
+SKIP = {".venv", ".git", "data", "results"}
+
+
+def existing(paths: Iterable[Path]) -> list[Path]:
+    return [p for p in paths if p.exists()]
 
 
 def contents(folder: Path) -> list[Path]:
@@ -42,15 +51,14 @@ def contents(folder: Path) -> list[Path]:
 
 
 def mlflow_paths() -> list[Path]:
-    paths = (data_root() / n for n in ("mlflow.db", "mlflow_hub", "mlflow_artifacts"))
-    return [p for p in paths if p.exists()]
+    team = (data_root() / n for n in ("mlflow.db", "mlflow_hub", "mlflow_artifacts"))
+    return existing(team) + existing(PROJECT_ROOT / n for n in ROOT_MLFLOW)
 
 
 def cache_paths() -> list[Path]:
-    found = [p for p in (PROJECT_ROOT / n for n in ROOT_CACHES) if p.exists()]
-    for top in PROJECT_ROOT.iterdir():
-        if top.is_dir() and top.name not in SKIP:
-            found += top.rglob("__pycache__") if top.name != "__pycache__" else [top]
+    found = existing(PROJECT_ROOT / n for n in ROOT_CACHES)
+    tops = [d for d in PROJECT_ROOT.iterdir() if d.is_dir() and d.name not in SKIP]
+    found += [d for top in tops for d in top.rglob("__pycache__")]
     return sorted(set(found))
 
 
