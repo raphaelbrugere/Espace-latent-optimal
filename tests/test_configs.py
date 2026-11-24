@@ -75,7 +75,7 @@ def test_pretrain_experiments_compose(exp):
 
 def test_smoke_pretrain_is_tiny_and_synthetic():
     cfg = load("pretrain", ["experiment=smoke", "env=ci"])
-    assert cfg.data.source._target_.endswith("synthetic.pretraining_images")
+    assert cfg.data.source._target_.endswith("synthetic.DATASET.pretraining_images")
     assert cfg.method.epochs <= 2 and cfg.method.max_steps_per_epoch <= 5
     assert cfg.method.precision == "fp32" and cfg.env.device == "cpu"
 

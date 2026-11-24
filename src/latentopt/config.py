@@ -4,7 +4,7 @@ ${project_root:}                        racine du depot (absolue, separateurs /)
 ${run_name:<donnees>,<archi>,<methode>[,<job>]}   nom d'un backbone (latentopt/hub.py)
 ${train_dir:...}                                 dossier d'un run de `lo train` (<run>/downstream/)
 ${run_stamp:[<job>]}                             date du lancement, AAAAMMJJ_HHMMSS[_<job>]
-${data_abbrev:<_target_ du pool>}                nom court du dataset (ABBREV de son module)
+${data_abbrev:<_target_ du pool>}                nom court du dataset (DatasetSpec.ABBREV)
 """
 
 from omegaconf import OmegaConf

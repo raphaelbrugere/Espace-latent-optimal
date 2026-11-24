@@ -3,7 +3,7 @@
 # ceux de la baseline. Pas de sonde en ligne : Pets n'a pas de tache de classification.
 # Prerequis : lo data prepare oxford_pets
 source:
-  _target_: latentopt.data.datasets.oxford_pets.pretraining_images
+  _target_: latentopt.data.datasets.oxford_pets.DATASET.pretraining_images
 img_size: 128
 num_probe_classes: null # pas de sonde
 probe_task: null # pas de validation pendant le pre-entrainement

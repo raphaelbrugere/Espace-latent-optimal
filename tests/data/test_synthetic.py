@@ -16,9 +16,9 @@ def pixels(img: Image.Image) -> np.ndarray:
 @pytest.mark.parametrize(
     "make",
     [
-        lambda seed: synthetic.Shapes(20, 10, seed),
-        lambda seed: synthetic.Blobs(20, seed),
-        lambda seed: synthetic.Heads(20, seed),
+        lambda seed: synthetic.ShapesSource(20, 10, seed),
+        lambda seed: synthetic.BlobsSource(20, seed),
+        lambda seed: synthetic.HeadsSource(20, seed),
     ],
     ids=["shapes", "blobs", "heads"],
 )
@@ -33,7 +33,7 @@ def test_sources_are_deterministic_per_index_and_seed(make):
 
 
 def test_shapes_labels_and_format():
-    src = synthetic.Shapes(30, 10, seed=0, size=40)
+    src = synthetic.ShapesSource(30, 10, seed=0, size=40)
     labels = [src[i][1] for i in range(len(src))]
     assert labels == [i % 10 for i in range(30)]
     img = src[0][0]
@@ -41,7 +41,7 @@ def test_shapes_labels_and_format():
 
 
 def test_blobs_mask_is_aligned_and_has_three_classes():
-    src = synthetic.Blobs(10, seed=0)
+    src = synthetic.BlobsSource(10, seed=0)
     for i in range(len(src)):
         img, mask = src[i]
         assert img.size == mask.size == (96, 72)  # non carre, comme les vrais masques
@@ -50,7 +50,7 @@ def test_blobs_mask_is_aligned_and_has_three_classes():
 
 
 def test_heads_box_is_valid_and_normalized():
-    src = synthetic.Heads(50, seed=0)
+    src = synthetic.HeadsSource(50, seed=0)
     for i in range(len(src)):
         _, target = src[i]
         box = target["box"]
@@ -64,9 +64,8 @@ def test_heads_box_is_valid_and_normalized():
 def test_builders_lengths(split):
     identity = lambda img, y: (img, y)  # noqa: E731
     n = synthetic.SIZES[split]
-    assert len(synthetic.build_cls(split, identity)) == n
-    assert len(synthetic.build_seg(split, identity)) == n
-    assert len(synthetic.build_det(split, identity)) == n
+    for build in synthetic.DATASET.tasks().values():
+        assert len(build(split, identity)) == n
 
 
 def test_splits_use_distinct_seeds():
@@ -74,7 +73,7 @@ def test_splits_use_distinct_seeds():
 
 
 def test_subset_applies_indices_and_joint_transform():
-    src = synthetic.Shapes(10, 10, seed=0)
+    src = synthetic.ShapesSource(10, 10, seed=0)
     sub = Subset(src, [3, 7], lambda img, y: (img.size, y * 10))
     assert len(sub) == 2
     assert sub[0] == ((80, 80), 30) and sub[1] == ((80, 80), 70)

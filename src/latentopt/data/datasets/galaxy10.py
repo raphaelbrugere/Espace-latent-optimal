@@ -15,10 +15,9 @@ from pathlib import Path
 from PIL import Image
 
 from latentopt.data import splits
-from latentopt.data.datasets.base import Subset, raw, require, reset
+from latentopt.data.datasets.base import ClsSource, DownloadableDataset, Subset, require, reset
 from latentopt.data.paths import datasets_root
 
-NAME = "galaxy10"
 REPO = "matthieulel/galaxy10_decals"
 # CRITIQUE : commit HF des donnees telechargees. NE PAS LE MODIFIER a la legere : les splits
 # figes designent les images par numero de ligne, valable pour cette revision seulement. Le
@@ -27,21 +26,16 @@ REPO = "matthieulel/galaxy10_decals"
 # scores incomparables aux anciens.
 REVISION = "d1cfafdcce69ca7cd25aecce1a0b578cf07e6a30"
 FOLDER = "galaxy10_decals"
-# CRITIQUE : nom court du dataset dans les noms de runs et de depots Hub. NE JAMAIS LE
-# MODIFIER : il renommerait tous les runs existants. Il doit aussi etre DIFFERENT de celui
-# de tous les autres datasets (verifie par tests/data/test_abbreviations.py).
-# Le " d " distingue DECaLS (256px) de Galaxy10 SDSS (69px), un autre dataset.
-ABBREV = "gal10d"
 
 
-class Source:
+class Galaxy10Source(ClsSource):
     """Train + test HF concatenes -> (image PIL RGB, label)."""
 
     def __init__(self, root: Path | None = None) -> None:
         from datasets import load_from_disk
 
         root = root or datasets_root()
-        require(root / FOLDER, NAME)
+        require(root / FOLDER, Galaxy10.NAME)
         self.ds = load_from_disk(str(root / FOLDER))
 
     def ids(self) -> list[str]:
@@ -58,52 +52,77 @@ class Source:
         return item["image"].convert("RGB"), int(item["label"])
 
 
-def present(root: Path | None = None) -> bool:
-    """Le dataset est-il deja telecharge dans `root` ?"""
-    return ((root or datasets_root()) / FOLDER).exists()
+class Galaxy10Pool(ClsSource):
+    """Split train fige seul (80 %) -> (image PIL RGB, label) : val et test n'y entrent pas."""
+
+    def __init__(self, root: Path | None = None) -> None:
+        DATASET.freeze_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
+        self.source, self.split = Galaxy10Source(root), "train"
+        self.rows = splits.indices(Galaxy10.NAME, "train", self.source.ids())
+
+    def ids(self) -> list[str]:
+        return [str(row) for row in self.rows]  # meme convention que Galaxy10Source
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    def __getitem__(self, i: int) -> tuple[Image.Image, int]:
+        return self.source[self.rows[i]]
 
 
-def download(root: Path | None = None, force: bool = False) -> None:
-    from datasets import concatenate_datasets, load_dataset
+class Galaxy10(DownloadableDataset):
+    """Classification 10 classes desequilibrees (`cls`) ; pool : train fige."""
 
-    root = root or datasets_root()
-    cache = root / ".hf_cache"
-    if force:
-        reset(root / FOLDER, cache)
-    if (root / FOLDER).exists():
-        return  # temporaire : seule la copie save_to_disk est gardee
-    parts = [
-        load_dataset(REPO, split=s, revision=REVISION, cache_dir=str(cache))
-        for s in ("train", "test")
-    ]
-    concatenate_datasets(parts).save_to_disk(str(root / FOLDER))
-    shutil.rmtree(cache, ignore_errors=True)
+    NAME = "galaxy10"
+    # CRITIQUE : fige, voir DatasetSpec.ABBREV. Le " d " distingue DECaLS (256px) de
+    # Galaxy10 SDSS (69px), un autre dataset.
+    ABBREV = "gal10d"
+
+    def present(self, root: Path | None = None) -> bool:
+        return ((root or datasets_root()) / FOLDER).exists()
+
+    def download(self, root: Path | None = None, force: bool = False) -> None:
+        from datasets import concatenate_datasets, load_dataset
+
+        root = root or datasets_root()
+        cache = root / ".hf_cache"
+        if force:
+            reset(root / FOLDER, cache)
+        if (root / FOLDER).exists():
+            return  # temporaire : seule la copie save_to_disk est gardee
+        parts = [
+            load_dataset(REPO, split=s, revision=REVISION, cache_dir=str(cache))
+            for s in ("train", "test")
+        ]
+        concatenate_datasets(parts).save_to_disk(str(root / FOLDER))
+        shutil.rmtree(cache, ignore_errors=True)
+
+    def freeze_splits(self, root: Path | None = None, force: bool = False) -> list[Path]:
+        """Fige le stratifie 80/10/10 de la revision epinglee, sauf si deja fait."""
+
+        def compute() -> splits.Computed:
+            source = Galaxy10Source(root)
+            meta = {"repo": REPO, "revision": REVISION, "seed": 0}
+            return splits.stratified(source.labels()), source.ids(), meta
+
+        return [splits.freeze(self.NAME, compute, force)]
+
+    def tasks(self) -> dict[str, Callable]:
+        return {"cls": self.build}
+
+    def build(self, split: str, transform: Callable, root: Path | None = None) -> Subset:
+        self.freeze_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
+        frozen = splits.load(self.NAME)
+        if frozen.get("revision") != REVISION:
+            got = frozen.get("revision")
+            raise ValueError(f"{self.NAME} : splits figes sur {got}, code sur {REVISION}")
+        source = Galaxy10Source(root)
+        return Subset(source, splits.indices(self.NAME, split, source.ids()), transform)
+
+    def pretraining_images(self, root: Path | None = None) -> Galaxy10Pool:
+        """Pool de pre-entrainement (configs/data/galaxy10.yaml). Hors protocole, dont le
+        pool est Imagenette."""
+        return Galaxy10Pool(root)
 
 
-def freeze_splits(root: Path | None = None, force: bool = False) -> Path:
-    """Fige le stratifie 80/10/10 de la revision epinglee, sauf si deja fait."""
-
-    def compute() -> splits.Computed:
-        source = Source(root)
-        meta = {"repo": REPO, "revision": REVISION, "seed": 0}
-        return splits.stratified(source.labels()), source.ids(), meta
-
-    return splits.freeze(NAME, compute, force)
-
-
-def build(split: str, transform: Callable, root: Path | None = None) -> Subset:
-    freeze_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
-    frozen = splits.load(NAME)
-    if frozen.get("revision") != REVISION:
-        raise ValueError(f"{NAME} : splits figes sur {frozen.get('revision')}, code sur {REVISION}")
-    source = Source(root)
-    return Subset(source, splits.indices(NAME, split, source.ids()), transform)
-
-
-def pretraining_images(root: Path | None = None) -> Subset:
-    """Pool de pre-entrainement (configs/data/galaxy10.yaml) : split train fige seul (80 %).
-    Val (sonde en ligne) et test n'y entrent pas. Hors protocole, dont le pool est
-    Imagenette."""
-    freeze_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
-    source = Source(root)
-    return Subset(source, splits.indices(NAME, "train", source.ids()), raw)
+DATASET = Galaxy10()

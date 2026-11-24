@@ -11,12 +11,8 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
-from latentopt.data.datasets.base import Subset
+from latentopt.data.datasets.base import ClsSource, DatasetSpec, DetSource, SegSource, Subset
 
-# CRITIQUE : nom court du dataset dans les noms de runs et de depots Hub. NE JAMAIS LE
-# MODIFIER : il renommerait tous les runs existants. Il doit aussi etre DIFFERENT de celui
-# de tous les autres datasets (verifie par tests/data/test_abbreviations.py).
-ABBREV = "synth"
 SIZES = {"train": 1000, "val": 150, "test": 300}
 SEEDS = {"train": 0, "val": 2, "test": 1}
 
@@ -25,7 +21,7 @@ def noise(rng: np.random.RandomState, w: int, h: int) -> Image.Image:
     return Image.fromarray(np.clip(rng.randn(h, w, 3) * 20 + 128, 0, 255).astype(np.uint8))
 
 
-class Shapes:
+class ShapesSource(ClsSource):
     """Classification : la classe fixe la couleur de fond et le nombre d'ellipses."""
 
     def __init__(self, n: int, num_classes: int, seed: int, size: int = 80) -> None:
@@ -34,6 +30,9 @@ class Shapes:
 
     def __len__(self) -> int:
         return self.n
+
+    def ids(self) -> list[str]:
+        return [str(i) for i in range(self.n)]  # pas de split fige : la graine fait le split
 
     def __getitem__(self, i: int) -> tuple[Image.Image, int]:
         # Graine unique par (split, index) : `seed` differe par split, i < 1_000_003.
@@ -49,7 +48,7 @@ class Shapes:
         return img, label
 
 
-class Blobs:
+class BlobsSource(SegSource):
     """Segmentation a 3 classes : ellipses colorees sur bruit, masque aligne."""
 
     palette = [(40, 40, 40), (220, 60, 60), (60, 200, 90)]
@@ -60,8 +59,11 @@ class Blobs:
     def __len__(self) -> int:
         return self.n
 
+    def ids(self) -> list[str]:
+        return [str(i) for i in range(self.n)]  # pas de split fige : la graine fait le split
+
     def __getitem__(self, i: int) -> tuple[Image.Image, Image.Image]:
-        rng = np.random.RandomState(self.seed * 1_000_003 + i)  # cf. Shapes
+        rng = np.random.RandomState(self.seed * 1_000_003 + i)  # cf. ShapesSource
         w0, h0 = self.size
         img, mask = noise(rng, w0, h0), Image.new("L", (w0, h0), 0)
         for _ in range(3):
@@ -73,7 +75,7 @@ class Blobs:
         return img, mask
 
 
-class Heads:
+class HeadsSource(DetSource):
     """Detection : une ellipse par image, classe = famille de couleur."""
 
     palette = [(220, 80, 60), (60, 120, 220)]
@@ -84,8 +86,11 @@ class Heads:
     def __len__(self) -> int:
         return self.n
 
+    def ids(self) -> list[str]:
+        return [str(i) for i in range(self.n)]  # pas de split fige : la graine fait le split
+
     def __getitem__(self, i: int) -> tuple[Image.Image, dict[str, torch.Tensor | int]]:
-        rng = np.random.RandomState(self.seed * 1_000_003 + i)  # cf. Shapes
+        rng = np.random.RandomState(self.seed * 1_000_003 + i)  # cf. ShapesSource
         w0, h0 = self.size
         img, label = noise(rng, w0, h0), i % 2
         w, h = rng.randint(14, w0 // 2), rng.randint(14, h0 // 2)
@@ -97,21 +102,30 @@ class Heads:
         return img, {"box": box, "label": label}
 
 
-def pretraining_images(num_classes: int = 10) -> Shapes:
-    """Pendant de `imagenette.pretraining_images` : source (image PIL, label)."""
-    return Shapes(SIZES["train"], num_classes, SEEDS["train"])
+class Synthetic(DatasetSpec):
+    """Genere a la volee : rien a telecharger, donc absent de `lo data prepare`."""
+
+    NAME = "synthetic"
+    ABBREV = "synth"  # CRITIQUE : fige, voir DatasetSpec.ABBREV
+
+    def pretraining_images(self, num_classes: int = 10) -> ShapesSource:
+        """Pendant de `Imagenette.pretraining_images` : (image PIL, label)."""
+        return ShapesSource(SIZES["train"], num_classes, SEEDS["train"])
+
+    def tasks(self) -> dict[str, Callable]:
+        return {"cls": self.build_cls, "seg": self.build_seg, "det": self.build_det}
+
+    def build_cls(self, split: str, transform: Callable, num_classes: int = 10) -> Subset:
+        source = ShapesSource(SIZES[split], num_classes, SEEDS[split])
+        return Subset(source, range(len(source)), transform)
+
+    def build_seg(self, split: str, transform: Callable) -> Subset:
+        source = BlobsSource(SIZES[split], SEEDS[split])
+        return Subset(source, range(len(source)), transform)
+
+    def build_det(self, split: str, transform: Callable) -> Subset:
+        source = HeadsSource(SIZES[split], SEEDS[split])
+        return Subset(source, range(len(source)), transform)
 
 
-def build_cls(split: str, transform: Callable, num_classes: int = 10) -> Subset:
-    source = Shapes(SIZES[split], num_classes, SEEDS[split])
-    return Subset(source, range(len(source)), transform)
-
-
-def build_seg(split: str, transform: Callable) -> Subset:
-    source = Blobs(SIZES[split], SEEDS[split])
-    return Subset(source, range(len(source)), transform)
-
-
-def build_det(split: str, transform: Callable) -> Subset:
-    source = Heads(SIZES[split], SEEDS[split])
-    return Subset(source, range(len(source)), transform)
+DATASET = Synthetic()

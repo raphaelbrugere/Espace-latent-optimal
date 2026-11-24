@@ -62,7 +62,7 @@ aval ne passent pas par ce groupe : ils sont choisis par `task=`.
 
 | Clé | Rôle |
 |---|---|
-| `source._target_` | `pretraining_images` du module du dataset : les images du pool |
+| `source._target_` | `<module>.DATASET.pretraining_images` : les images du pool ([DATASETS.md](DATASETS.md)) |
 | `img_size` | résolution du pré-entraînement |
 | `num_probe_classes` | classes de la sonde en ligne ; `null` = pas de sonde |
 | `probe_task` | tâche dont le val sert à la sonde ; `null` = pas de validation |

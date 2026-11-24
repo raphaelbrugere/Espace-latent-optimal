@@ -44,12 +44,12 @@ def test_reset_removes_folders_and_files_and_ignores_missing(tmp_path):
 
 @pytest.mark.parametrize(
     "module, attr",
-    [(flowers102, "Flowers102"), (imagenette, "Imagenette"), (oxford_pets, "OxfordIIITPet")],
+    [(flowers102, "TvFlowers102"), (imagenette, "TvImagenette"), (oxford_pets, "TvOxfordIIITPet")],
 )
 def test_force_download_removes_the_old_folder_first(tmp_path, fake, module, attr):
     folder = make_download(tmp_path, module.FOLDER)
     cls = fake(module, attr, folder)
-    module.download(tmp_path, force=True)
+    module.DATASET.download(tmp_path, force=True)
     assert cls.calls and not any(cls.calls)  # le dossier n'existait plus a l'appel
 
 
@@ -57,15 +57,15 @@ def test_imagenette_force_download_removes_the_archive_too(tmp_path, fake):
     make_download(tmp_path, imagenette.FOLDER)
     archive = tmp_path / f"{imagenette.FOLDER}.tgz"
     archive.write_text("x")
-    fake(imagenette, "Imagenette", tmp_path / imagenette.FOLDER)
-    imagenette.download(tmp_path, force=True)
+    fake(imagenette, "TvImagenette", tmp_path / imagenette.FOLDER)
+    imagenette.DATASET.download(tmp_path, force=True)
     assert not archive.exists()
 
 
 def test_download_without_force_keeps_existing_files(tmp_path, fake):
     folder = make_download(tmp_path, flowers102.FOLDER)
-    fake(flowers102, "Flowers102", folder)
-    flowers102.download(tmp_path)
+    fake(flowers102, "TvFlowers102", folder)
+    flowers102.DATASET.download(tmp_path)
     assert (folder / "ancien.bin").exists()
 
 

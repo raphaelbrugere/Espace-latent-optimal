@@ -32,16 +32,9 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import partial
 
-from latentopt.data.datasets import flowers102, galaxy10, imagenette, oxford_pets
+from latentopt.data.datasets.registry import DOWNLOADABLE as DATASETS
 from latentopt.data.paths import datasets_root
 from latentopt.models.backbones.external import DOWNLOADS as WEIGHTS
-
-DATASETS = {
-    "imagenette": imagenette,
-    "flowers102": flowers102,
-    "galaxy10": galaxy10,
-    "oxford_pets": oxford_pets,
-}
 
 
 @contextmanager
@@ -107,16 +100,16 @@ def main(argv: list[str] | None = None) -> None:
             if name in WEIGHTS:
                 print(f"[{name}] poids -> {WEIGHTS[name]()}", flush=True)
                 continue
-            module = DATASETS[name]
-            if not args.force_download and module.present(root):
+            dataset = DATASETS[name]
+            if not args.force_download and dataset.present(root):
                 print(f"[{name}] deja present dans {root}, utilise tel quel", flush=True)
             else:
                 print(f"[{name}] telechargement dans {root}", flush=True)
                 start = time.perf_counter()
-                module.download(root, force=args.force_download)
+                dataset.download(root, force=args.force_download)
                 if args.verbose:
                     print(f"[{name}] telecharge en {time.perf_counter() - start:.0f} s", flush=True)
-            module.freeze_splits(root, force=args.force_splits)  # dit lui-meme ce qu'il fait
+            dataset.freeze_splits(root, force=args.force_splits)  # dit lui-meme ce qu'il fait
 
 
 if __name__ == "__main__":

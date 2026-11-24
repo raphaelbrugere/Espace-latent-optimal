@@ -14,27 +14,32 @@ from pathlib import Path
 import numpy as np
 import torch
 from PIL import Image
-from torchvision.datasets import OxfordIIITPet
+from torchvision.datasets import OxfordIIITPet as TvOxfordIIITPet
 
 from latentopt.data import splits
-from latentopt.data.datasets.base import Subset, require, reset
+from latentopt.data.datasets.base import (
+    ClsSource,
+    DetSource,
+    DownloadableDataset,
+    SegSource,
+    Subset,
+    require,
+    reset,
+)
 from latentopt.data.paths import datasets_root
 
 SEG_NAME, DET_NAME = "oxford_pets_seg", "oxford_pets_det"
 FOLDER = "oxford-iiit-pet"
-# CRITIQUE : nom court du dataset dans les noms de runs et de depots Hub. NE JAMAIS LE
-# MODIFIER : il renommerait tous les runs existants. Il doit aussi etre DIFFERENT de celui
-# de tous les autres datasets (verifie par tests/data/test_abbreviations.py).
-ABBREV = "pets"
 
 
-class SegSource:
+class PetsSegSource(SegSource):
     """Split officiel ("trainval" | "test") -> (image PIL RGB, masque PIL dans {0, 1, 2})."""
 
     def __init__(self, official_split: str, root: Path | None = None) -> None:
         root = root or datasets_root()
-        require(root / FOLDER, "oxford_pets")
-        self.ds = OxfordIIITPet(
+        require(root / FOLDER, OxfordPets.NAME)
+        self.split = official_split
+        self.ds = TvOxfordIIITPet(
             root, split=official_split, target_types="segmentation", download=False
         )
 
@@ -61,12 +66,12 @@ def trainval_rows(base: Path) -> list[tuple[str, int]]:
     return rows
 
 
-class DetSource:
+class PetsDetSource(DetSource):
     """Images de trainval annotees -> (image PIL RGB, {"box": xyxy dans [0, 1], "label"})."""
 
     def __init__(self, root: Path | None = None) -> None:
         base = (root or datasets_root()) / FOLDER
-        require(base, "oxford_pets")
+        require(base, OxfordPets.NAME)
         self.images, xmls = base / "images", base / "annotations" / "xmls"
         self.items = [
             (n, s, read_box(xmls / f"{n}.xml"))
@@ -98,67 +103,7 @@ def read_box(path: Path) -> list[float]:
     return [x1 / w, y1 / h, x2 / w, y2 / h]
 
 
-def present(root: Path | None = None) -> bool:
-    """Images et annotations des deux splits sont-elles deja telechargees dans `root` ?"""
-    try:
-        for split in ("trainval", "test"):
-            OxfordIIITPet(root or datasets_root(), split=split, download=False)
-    except RuntimeError:  # " Dataset not found "
-        return False
-    return True
-
-
-def download(root: Path | None = None, force: bool = False) -> None:
-    root = root or datasets_root()
-    if force:
-        reset(root / FOLDER)
-    for split in ("trainval", "test"):  # images + annotations, xmls compris
-        OxfordIIITPet(root, split=split, download=True)
-
-
-def freeze_seg_splits(root: Path | None = None, force: bool = False) -> Path:
-    """Fige la segmentation (holdout de trainval + test officiel), sauf si deja fait."""
-
-    def compute() -> splits.Computed:
-        trainval, test = SegSource("trainval", root), SegSource("test", root)
-        n = len(trainval)
-        parts = splits.holdout(n)
-        parts["test"] = list(range(n, n + len(test)))  # ids du test a la suite de ceux de trainval
-        meta = {"pool": "trainval", "test": "test officiel", "seed": 0, "frac": 0.05}
-        return parts, trainval.ids() + test.ids(), meta
-
-    return splits.freeze(SEG_NAME, compute, force)
-
-
-def freeze_det_splits(root: Path | None = None, force: bool = False) -> Path:
-    """Fige la detection (stratifie 80/10/10 par espece), sauf si deja fait."""
-
-    def compute() -> splits.Computed:
-        source = DetSource(root)
-        meta = {"pool": "trainval+xmls", "seed": 0}
-        return splits.stratified(source.labels()), source.ids(), meta
-
-    return splits.freeze(DET_NAME, compute, force)
-
-
-def freeze_splits(root: Path | None = None, force: bool = False) -> list[Path]:
-    """Fige les splits de segmentation et de detection."""
-    return [freeze_seg_splits(root, force), freeze_det_splits(root, force)]
-
-
-def build_seg(split: str, transform: Callable, root: Path | None = None) -> Subset:
-    freeze_seg_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
-    source = SegSource("test" if split == "test" else "trainval", root)
-    return Subset(source, splits.indices(SEG_NAME, split, source.ids()), transform)
-
-
-def build_det(split: str, transform: Callable, root: Path | None = None) -> Subset:
-    freeze_det_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
-    source = DetSource(root)
-    return Subset(source, splits.indices(DET_NAME, split, source.ids()), transform)
-
-
-class PoolSource:
+class PetsPool(ClsSource):
     """Images de trainval hors test de la detection -> (image PIL RGB, espece : 0 chat, 1 chien).
 
     Le test de `pets_det` est tire de trainval (stratifie) : sans cette exclusion, le
@@ -167,8 +112,8 @@ class PoolSource:
 
     def __init__(self, root: Path | None = None) -> None:
         base = (root or datasets_root()) / FOLDER
-        require(base, "oxford_pets")
-        freeze_det_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
+        require(base, OxfordPets.NAME)
+        DATASET.freeze_det_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
         excluded = set(splits.load(DET_NAME)["splits"]["test"])
         self.images = base / "images"
         self.items = [(n, s) for n, s in trainval_rows(base) if n not in excluded]
@@ -184,8 +129,75 @@ class PoolSource:
         return Image.open(self.images / f"{name}.jpg").convert("RGB"), label
 
 
-def pretraining_images(root: Path | None = None) -> PoolSource:
-    """Pool de pre-entrainement (configs/data/oxford_pets.yaml) : trainval sans le test de la
-    detection. Pas de sonde en ligne : Pets n'a pas de tache de classification. Hors protocole,
-    dont le pool est Imagenette."""
-    return PoolSource(root)
+class OxfordPets(DownloadableDataset):
+    """Segmentation (`seg`) et detection (`det`) ; pool : trainval sans le test de `det`."""
+
+    NAME = "oxford_pets"
+    ABBREV = "pets"  # CRITIQUE : fige, voir DatasetSpec.ABBREV
+
+    def present(self, root: Path | None = None) -> bool:
+        """Images et annotations des deux splits sont-elles deja telechargees dans `root` ?"""
+        try:
+            for split in ("trainval", "test"):
+                TvOxfordIIITPet(root or datasets_root(), split=split, download=False)
+        except RuntimeError:  # " Dataset not found "
+            return False
+        return True
+
+    def download(self, root: Path | None = None, force: bool = False) -> None:
+        root = root or datasets_root()
+        if force:
+            reset(root / FOLDER)
+        for split in ("trainval", "test"):  # images + annotations, xmls compris
+            TvOxfordIIITPet(root, split=split, download=True)
+
+    def freeze_seg_splits(self, root: Path | None = None, force: bool = False) -> Path:
+        """Fige la segmentation (holdout de trainval + test officiel), sauf si deja fait."""
+
+        def compute() -> splits.Computed:
+            trainval, test = PetsSegSource("trainval", root), PetsSegSource("test", root)
+            n = len(trainval)
+            parts = splits.holdout(n)
+            parts["test"] = list(
+                range(n, n + len(test))
+            )  # ids du test a la suite de ceux de trainval
+            meta = {"pool": "trainval", "test": "test officiel", "seed": 0, "frac": 0.05}
+            return parts, trainval.ids() + test.ids(), meta
+
+        return splits.freeze(SEG_NAME, compute, force)
+
+    def freeze_det_splits(self, root: Path | None = None, force: bool = False) -> Path:
+        """Fige la detection (stratifie 80/10/10 par espece), sauf si deja fait."""
+
+        def compute() -> splits.Computed:
+            source = PetsDetSource(root)
+            meta = {"pool": "trainval+xmls", "seed": 0}
+            return splits.stratified(source.labels()), source.ids(), meta
+
+        return splits.freeze(DET_NAME, compute, force)
+
+    def freeze_splits(self, root: Path | None = None, force: bool = False) -> list[Path]:
+        """Fige les splits de segmentation et de detection, sauf si deja fait."""
+        return [self.freeze_seg_splits(root, force), self.freeze_det_splits(root, force)]
+
+    def build_seg(self, split: str, transform: Callable, root: Path | None = None) -> Subset:
+        self.freeze_seg_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
+        source = PetsSegSource("test" if split == "test" else "trainval", root)
+        return Subset(source, splits.indices(SEG_NAME, split, source.ids()), transform)
+
+    def build_det(self, split: str, transform: Callable, root: Path | None = None) -> Subset:
+        self.freeze_det_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
+        source = PetsDetSource(root)
+        return Subset(source, splits.indices(DET_NAME, split, source.ids()), transform)
+
+    def tasks(self) -> dict[str, Callable]:
+        return {"seg": self.build_seg, "det": self.build_det}
+
+    def pretraining_images(self, root: Path | None = None) -> PetsPool:
+        """Pool de pre-entrainement (configs/data/oxford_pets.yaml) : trainval sans le test de
+        la detection. Pas de sonde en ligne : Pets n'a pas de tache de classification. Hors
+        protocole, dont le pool est Imagenette."""
+        return PetsPool(root)
+
+
+DATASET = OxfordPets()

@@ -1,6 +1,6 @@
 # Images generees, sans fichier ni reseau : smoke run et CI. Scores sans signification.
 source:
-  _target_: latentopt.data.datasets.synthetic.pretraining_images
+  _target_: latentopt.data.datasets.synthetic.DATASET.pretraining_images
   num_classes: 10
 img_size: 64
 num_probe_classes: 10

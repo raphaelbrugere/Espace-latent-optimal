@@ -7,9 +7,9 @@ changement d'ordre de listage cote torchvision ou HF ne peut pas les deplacer.
 Les splits officiels (Flowers-102, tests d'Imagenette et de Pets) passent par le meme
 mecanisme : le JSON liste les identifiants que la definition officielle du dataset donne.
 
-Chaque dataset definit son calcul dans son propre module (`freeze_splits`), appele par
-`build` : un JSON existant est lu tel quel, sinon il est cree. `freeze` ne le reecrit
-qu'avec `force`.
+Chaque dataset definit son calcul dans sa methode `freeze_splits`, appelee par ses
+constructeurs de splits : un JSON existant est lu tel quel, sinon il est cree. `freeze` ne
+le reecrit qu'avec `force`.
 """
 
 import json

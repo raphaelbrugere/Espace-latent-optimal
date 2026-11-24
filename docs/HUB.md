@@ -39,7 +39,7 @@ imagenet1k-vit_s8_dino-dino-20261117_100000/                     backbone extern
 
 | Partie | Origine |
 |---|---|
-| `<données>` | nom court (`ABBREV`) du module du dataset de pré-entraînement : `imnt160` (Imagenette 160px), `fl102`, `gal10d`, `pets`, `synth` ; défini dans le code, pas dans les configs, et figé |
+| `<données>` | nom court (`ABBREV`) du dataset de pré-entraînement : `imnt160` (Imagenette 160px), `fl102`, `gal10d`, `pets`, `synth` ; défini dans le code, pas dans les configs, et figé |
 | `<archi>` | groupe `backbone` (`vit_s8`, `vit_s8_dino`…) |
 | `<méthode>` | groupe `method` (`lejepa`…) |
 | `<AAAAMMJJ_HHMMSS>` | date du lancement ; `_1`, `_2`… pour les jobs 1, 2… d'un balayage `-m` (date propre à chaque job sur Slurm, commune en local) |

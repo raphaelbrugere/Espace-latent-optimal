@@ -3,7 +3,7 @@
 # non comparables a ceux de la baseline. Val et test n'y entrent pas.
 # Prerequis : lo data prepare galaxy10
 source:
-  _target_: latentopt.data.datasets.galaxy10.pretraining_images
+  _target_: latentopt.data.datasets.galaxy10.DATASET.pretraining_images
 img_size: 128
 num_probe_classes: 10
 probe_task: galaxy10_cls # val de la sonde en ligne : split val fige, hors du pool

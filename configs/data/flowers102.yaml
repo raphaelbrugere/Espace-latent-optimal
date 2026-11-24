@@ -3,7 +3,7 @@
 # comparables a ceux de la baseline. Le test n'y entre jamais.
 # Prerequis : lo data prepare flowers102
 source:
-  _target_: latentopt.data.datasets.flowers102.pretraining_images
+  _target_: latentopt.data.datasets.flowers102.DATASET.pretraining_images
 img_size: 128
 num_probe_classes: 102
 probe_task: flowers102_cls # val de la sonde en ligne : val officiel, hors du pool

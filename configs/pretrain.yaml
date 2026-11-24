@@ -7,7 +7,7 @@
 # Chaque run ecrit dans results/<donnees>-<archi>-<methode>-<AAAAMMJJ_HHMMSS>/backbone/ :
 # backbone.pt, results.json (ecrit en dernier) et les fichiers communs a tout run (liste complete :
 # docs/HUB.md#un-dossier-par-backbone). <donnees> est le nom court (ABBREV) du
-# module du dataset, ex. imnt160 : il est dans le code, pas dans les configs.
+# dataset, ex. imnt160 : il est dans le code, pas dans les configs.
 # <donnees>-<archi>-<methode>-<date> est le dossier du backbone, de ses entrainements
 # downstream et de leurs evaluations, et son depot Hugging Face (docs/HUB.md).
 defaults:

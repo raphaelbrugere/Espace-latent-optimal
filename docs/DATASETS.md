@@ -17,14 +17,32 @@ pas, pour que nos scores restent comparables entre eux. Le code est dans
 
 Les MD5 sont ceux que torchvision vérifie au téléchargement. Les tailles sont celles des archives.
 
+## Un dataset dans le code
+
+Chaque fichier de `src/latentopt/data/datasets/` définit une classe et son instance `DATASET` :
+
+- `DatasetSpec` (tout dataset) : `NAME`, `ABBREV`, `pretraining_images` (le pool de pré-entraînement) et `tasks()`,
+  les constructeurs de splits par type de tâche (`"cls"`, `"seg"`, `"det"`). Le protocole de chaque tâche
+  (transforms, métrique) est dans `evaluation/tasks.py`.
+- `DownloadableDataset` (datasets sur disque) ajoute `present`, `download` et `freeze_splits`, appelés par
+  `lo data prepare`. `synthetic`, généré à la volée, n'en est pas un : `lo data prepare` ne le propose pas.
+
+Le `DATASET` ne garde aucune donnée : il fabrique des sources, les données brutes d'un split officiel
+(`source[i]` donne `(image, cible)`, `ids()` les identifiants des splits figés). Chaque source hérite de
+`ClsSource`, `SegSource` ou `DetSource` selon le format de sa cible, défini dans `base.py`. Un `Subset` filtre
+ensuite une source par split et lui applique le transform : c'est lui que reçoit le DataLoader.
+
+Une classe incomplète ne peut pas être instanciée : l'oubli se voit dès l'import. Ajouter un dataset : écrire sa
+classe et son `DATASET`, l'ajouter à `ALL` dans `registry.py`, puis créer `configs/data/<NAME>.yaml`.
+
 ## Noms courts
 
-Chaque module de dataset définit un nom court, `ABBREV`. C'est la partie `<données>` du nom d'un backbone
-pré-entraîné, donc de son dossier `results/<run>/` et de son dépôt Hugging Face ([HUB.md](HUB.md)). Il est lu dans
-le module désigné par `data.source._target_`, jamais dans les configs : renommer un fichier de `configs/data/` ne
-renomme pas les runs.
+Chaque dataset définit un nom court, `ABBREV`. C'est la partie `<données>` du nom d'un backbone pré-entraîné, donc de
+son dossier `results/<run>/` et de son dépôt Hugging Face ([HUB.md](HUB.md)). Il est lu sur le dataset désigné par
+`data.source._target_` (`<module>.DATASET.pretraining_images`), jamais dans les configs : renommer un fichier de
+`configs/data/` ne renomme pas les runs.
 
-| Module | `ABBREV` |
+| Dataset | `ABBREV` |
 |---|---|
 | `imagenette` | `imnt160` (suit la variante chargée : 160px) |
 | `flowers102` | `fl102` |
@@ -81,7 +99,7 @@ Deux origines, dans les mêmes JSON :
 - **Officiels** (Flowers-102, tests d'Imagenette et de Pets) : non calculés. Le JSON liste les identifiants que
   donne la définition officielle du dataset, lue par torchvision.
 
-Chaque module de `datasets/` définit son split dans `freeze_splits`. `lo data prepare` l'appelle pour chaque
+Chaque dataset définit son split dans `freeze_splits`. `lo data prepare` l'appelle pour chaque
 dataset préparé, et `build` aussi avant de lire, en filet de sécurité : un JSON existant est lu tel quel, sinon il
 est créé (écriture atomique). Un JSON existant n'est réécrit que par `--force-splits` : ni un téléchargement, ni
 `--force-download` ne le touchent. Un JSON généré doit être commité : sans lui, deux machines dont l'ordre de

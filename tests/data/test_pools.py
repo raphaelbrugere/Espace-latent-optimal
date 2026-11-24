@@ -36,7 +36,7 @@ def test_pool_declares_exactly_its_keys(name):
 @pytest.mark.parametrize("name", POOLS)
 def test_pool_source_is_the_pretraining_function_of_its_dataset(name):
     target = pool(name).source._target_
-    assert target == f"latentopt.data.datasets.{name}.pretraining_images"
+    assert target == f"latentopt.data.datasets.{name}.DATASET.pretraining_images"
     assert callable(get_method(target))
 
 

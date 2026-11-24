@@ -16,7 +16,7 @@ import torch
 import torch.nn.functional as F
 
 from latentopt.data import transforms as T
-from latentopt.data.datasets import flowers102, galaxy10, imagenette, oxford_pets, synthetic
+from latentopt.data.datasets.registry import BY_NAME as DATASETS
 from latentopt.evaluation import metrics as M
 from latentopt.losses import detection_loss, segmentation_loss
 
@@ -104,19 +104,31 @@ def detection(name: str, build: Callable, size: int) -> Task:
     )
 
 
+def builder(dataset: str, kind: str) -> Callable:
+    """Constructeur de splits `kind` ("cls", "seg", "det") du dataset `dataset`."""
+    return DATASETS[dataset].tasks()[kind]
+
+
 TASKS = {
     t.name: t
     for t in (
-        classification("imagenette_cls", imagenette.build, 10, T.CenterCrop(SIZE), 20),
-        classification("flowers102_cls", flowers102.build, 102, T.CenterCrop(SIZE), 30),
+        classification("imagenette_cls", builder("imagenette", "cls"), 10, T.CenterCrop(SIZE), 20),
+        classification("flowers102_cls", builder("flowers102", "cls"), 102, T.CenterCrop(SIZE), 30),
         classification(
-            "galaxy10_cls", galaxy10.build, 10, T.SquareResize(SIZE), 20, "balanced_acc"
+            "galaxy10_cls",
+            builder("galaxy10", "cls"),
+            10,
+            T.SquareResize(SIZE),
+            20,
+            "balanced_acc",
+        ),  # fmt: skip
+        segmentation("pets_seg", builder("oxford_pets", "seg"), SIZE),
+        detection("pets_det", builder("oxford_pets", "det"), SIZE),
+        classification(
+            "synthetic_cls", builder("synthetic", "cls"), 10, T.CenterCrop(SMOKE_SIZE), 20
         ),
-        segmentation("pets_seg", oxford_pets.build_seg, SIZE),
-        detection("pets_det", oxford_pets.build_det, SIZE),
-        classification("synthetic_cls", synthetic.build_cls, 10, T.CenterCrop(SMOKE_SIZE), 20),
-        segmentation("synthetic_seg", synthetic.build_seg, SMOKE_SIZE),
-        detection("synthetic_det", synthetic.build_det, SMOKE_SIZE),
+        segmentation("synthetic_seg", builder("synthetic", "seg"), SMOKE_SIZE),
+        detection("synthetic_det", builder("synthetic", "det"), SMOKE_SIZE),
     )
 }
 
