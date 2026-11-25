@@ -19,21 +19,33 @@ Les MD5 sont ceux que torchvision vérifie au téléchargement. Les tailles sont
 
 ## Un dataset dans le code
 
-Chaque fichier de `src/latentopt/data/datasets/` définit une classe et son instance `DATASET` :
+Chaque module de dataset de `src/latentopt/data/datasets/` (hors `base.py`, `registry.py` et `__init__.py`) définit une
+classe et son instance `DATASET`. Un dataset, c'est une classe qui donne :
 
-- `DatasetSpec` (tout dataset) : `NAME`, `ABBREV`, `pretraining_images` (le pool de pré-entraînement) et `tasks()`,
-  les constructeurs de splits par type de tâche (`"cls"`, `"seg"`, `"det"`). Le protocole de chaque tâche
-  (transforms, métrique) est dans `evaluation/tasks.py`.
-- `DownloadableDataset` (datasets sur disque) ajoute `present`, `download` et `freeze_splits`, appelés par
-  `lo data prepare`. `synthetic`, généré à la volée, n'en est pas un : `lo data prepare` ne le propose pas.
+- son nom (`NAME`), son nom court (`ABBREV`, voir plus bas) ;
+- son pool de pré-entraînement (`pretraining_images`) ;
+- ses tâches (`tasks()`) : pour chaque type (`"cls"`, `"seg"`, `"det"`), le constructeur qui fabrique les données d'un
+  split. Le protocole de la tâche (transforms, métrique) est dans `evaluation/tasks.py`.
 
-Le `DATASET` ne garde aucune donnée : il fabrique des sources, les données brutes d'un split officiel
-(`source[i]` donne `(image, cible)`, `ids()` les identifiants des splits figés). Chaque source hérite de
-`ClsSource`, `SegSource` ou `DetSource` selon le format de sa cible, défini dans `base.py`. Un `Subset` filtre
-ensuite une source par split et lui applique le transform : c'est lui que reçoit le DataLoader.
+Un dataset à télécharger (`DownloadableDataset`) ajoute `present`, `download` et `freeze_splits`, appelés par
+`lo data prepare`. `synthetic`, généré à la volée, n'en est pas un : `lo data prepare` ne le propose pas.
 
-Une classe incomplète ne peut pas être instanciée : l'oubli se voit dès l'import. Ajouter un dataset : écrire sa
-classe et son `DATASET`, l'ajouter à `ALL` dans `registry.py`, puis créer `configs/data/<NAME>.yaml`.
+Le `DATASET` ne garde aucune donnée : il fabrique des données brutes (`source[i]` donne `(image, cible)`, `ids()` les
+identifiants des splits figés), que la tâche filtre ensuite par split et transforme pour le DataLoader. Ces données
+brutes ne sont pas toujours un split officiel : Galaxy10 concatène le train et le test de Hugging Face, et les pools de
+pré-entraînement de Galaxy10 et de Pets sont déjà filtrés.
+
+Règle : la classe porte ce que le reste du projet lit (`NAME`, `ABBREV`, méthodes) ; les constantes propres au
+dataset (dossier, révision…) restent dans son module.
+
+Une classe incomplète ne peut pas être instanciée : l'oubli se voit dès l'import. Ajouter un dataset :
+
+1. écrire sa classe et son `DATASET`, et l'ajouter à `ALL` dans `registry.py` ;
+2. créer `configs/data/<NAME>.yaml` (son pool) ;
+3. déclarer ses tâches dans `evaluation/tasks.py` ;
+4. figer son nom court dans `PINNED`, `tests/data/test_abbreviations.py`.
+
+Les tests du registre et des pools signalent un oubli.
 
 ## Noms courts
 
@@ -64,6 +76,7 @@ chiffres, et figé par `tests/data/test_abbreviations.py`. Un nouveau dataset de
 | `pets_det` | 128px carré ; boîte normalisée dans [0, 1] | 2 (chat, chien) | localisation : classe juste et IoU ≥ seuil, moyenné sur IoU 0.5 à 0.95 |
 
 Les transforms d'évaluation font partie du protocole : les modifier rend les scores incomparables.
+Elles renvoient des images dans [0, 1] : la normalisation est faite par le backbone (contrat dans `models/contract.py`).
 
 ## Respect de la règle
 
@@ -100,9 +113,9 @@ Deux origines, dans les mêmes JSON :
   donne la définition officielle du dataset, lue par torchvision.
 
 Chaque dataset définit son split dans `freeze_splits`. `lo data prepare` l'appelle pour chaque
-dataset préparé, et `build` aussi avant de lire, en filet de sécurité : un JSON existant est lu tel quel, sinon il
-est créé (écriture atomique). Un JSON existant n'est réécrit que par `--force-splits` : ni un téléchargement, ni
-`--force-download` ne le touchent. Un JSON généré doit être commité : sans lui, deux machines dont l'ordre de
+dataset préparé. Les constructeurs de splits des tâches et les pools de pré-entraînement l'appellent aussi avant de
+lire, en filet de sécurité : un JSON existant est lu tel quel, sinon il est créé (écriture atomique). Un JSON
+existant n'est réécrit que par `--force-splits` : ni un téléchargement, ni `--force-download` ne le touchent. Un JSON généré doit être commité : sans lui, deux machines dont l'ordre de
 listage diffère n'auraient pas les mêmes splits.
 
 Les images sont lues par identifiant, donc dans l'ordre trié des identifiants et non dans l'ordre officiel de
@@ -110,8 +123,9 @@ torchvision. L'évaluation n'en dépend pas, mais un entraînement avec la même
 faisait avant cet ordre. Un identifiant manquant au chargement lève une erreur.
 
 Galaxy10 demande une attention particulière : ses identifiants sont des numéros de ligne, valables pour la seule
-révision HF épinglée (`REVISION` dans `galaxy10.py`). Le JSON enregistre cette révision, et `build` vérifie qu'elle
-est celle du code. En revanche, les données sur disque ne gardent pas trace de la leur : changer `REVISION` sans
+révision HF épinglée (`REVISION` dans `galaxy10.py`). Le JSON enregistre cette révision, et la tâche
+`galaxy10_cls` vérifie qu'elle est celle du code ; le pool de pré-entraînement (`data=galaxy10`) ne fait pas cette
+vérification. De plus, les données sur disque ne gardent pas trace de la leur : changer `REVISION` sans
 re-télécharger passerait inaperçu, et les numéros de ligne désigneraient d'autres images. Changer `REVISION` impose
 donc `lo data prepare galaxy10 --force-download --force-splits`, et rend les scores incomparables aux anciens.
 
@@ -121,7 +135,7 @@ Le téléchargement et le chargement sont séparés. Seul `lo data prepare` acc�
 datasets ne font que lire, et échouent immédiatement, avec la commande à lancer, si les données manquent.
 
 ```bash
-uv run lo data prepare                          # tout (~3,8 Go)
+uv run lo data prepare                          # tout (tailles : tableau ci-dessus)
 uv run lo data prepare imagenette oxford_pets   # une partie
 uv run lo data prepare dino_vits8               # poids DINO du ViT-S/8 -> data/models/ (83 Mo)
 uv run lo data prepare oxford_pets --force-download --force-splits --verbose   # tout refaire, avec les barres
@@ -163,7 +177,7 @@ Les sous-dossiers de `datasets/` sont créés par le téléchargement, avec les 
 pas les créer à la main, torchvision prendrait un dossier vide pour un téléchargement déjà fait.
 
 Galaxy10 transite par un cache HF temporaire (`data/datasets/.hf_cache/`, ~2,5 Go) supprimé après la copie (et par `--force-download`) :
-prévoir ~5 Go libres pendant le téléchargement.
+prévoir la place du cache en plus de celle de la copie pendant le téléchargement.
 
 ## Variables d'environnement
 
