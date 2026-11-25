@@ -117,7 +117,16 @@ def test_localization_thresholds():
 
 
 def test_localization_thresholds_are_coco_style():
-    assert len(M.LocalizationAccuracy.thresholds) == 10
-    assert M.LocalizationAccuracy.thresholds[0] == pytest.approx(0.5)
-    assert M.LocalizationAccuracy.thresholds[5] == pytest.approx(0.75)
-    assert M.LocalizationAccuracy.thresholds[-1] == pytest.approx(0.95)
+    assert len(M.LocalizationAccuracy.iou_thresholds) == 10
+    assert M.LocalizationAccuracy.iou_thresholds[0] == pytest.approx(0.5)
+    assert M.LocalizationAccuracy.iou_thresholds[5] == pytest.approx(0.75)
+    assert M.LocalizationAccuracy.iou_thresholds[-1] == pytest.approx(0.95)
+
+
+def test_paired_iou_matches_box_iou_diagonal():
+    from torchvision.ops import box_iou
+
+    p = torch.rand(20, 4)
+    a = torch.cat([p[:, :2], p[:, :2] + p[:, 2:] * 0.5], 1)
+    b = a + 0.05 * torch.randn(20, 4).abs()
+    assert torch.equal(M.paired_iou(a, b), box_iou(a, b).diagonal())

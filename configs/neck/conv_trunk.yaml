@@ -3,4 +3,4 @@
 _target_: latentopt.models.necks.ConvTrunk
 _partial_: true
 channels: 128 # largeur du tronc convolutif
-target_stride: 8 # le neck lit la carte dont le stride est le plus proche
+level: block12 # carte lue (nom dans feature_info) ; block12 = la plus profonde du ViT-S/8

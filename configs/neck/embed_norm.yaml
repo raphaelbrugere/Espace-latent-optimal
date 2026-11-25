@@ -1,5 +1,5 @@
 # Neck embed_norm : embedding global du backbone, normalise (classification).
-# Fourni a l'execution : embed_dim (backbone). Variante : neck.norm=false (meme nom de dossier).
+# Fourni a l'execution : embed_dim (backbone). Variante : neck.norm=none (meme nom de dossier).
 _target_: latentopt.models.necks.EmbedNorm
 _partial_: true
-norm: true # LayerNorm sur embed ; false = embed tel quel (sonde lineaire stricte)
+norm: layernorm # layernorm | none (embed tel quel : sonde lineaire stricte)

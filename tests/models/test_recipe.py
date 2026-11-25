@@ -27,8 +27,10 @@ def test_each_config_targets_its_module(group, name):
 @pytest.mark.parametrize("task", sorted(TASKS))
 def test_each_default_pair_builds_on_the_backbone_and_runs(pyramid, task):
     t = TASKS[task]
-    head = recipe.build(recipe.load("neck", t.default_neck), recipe.load("head", t.default_head),
-                        pyramid, t.num_classes)  # fmt: skip
+    neck_cfg = recipe.load("neck", t.default_neck)
+    if t.default_neck == "conv_trunk":  # le defaut (block12) est celui du ViT-S/8 du projet
+        neck_cfg = OmegaConf.merge(neck_cfg, {"level": "c8"})
+    head = recipe.build(neck_cfg, recipe.load("head", t.default_head), pyramid, t.num_classes)
     assert isinstance(head, Downstream)
     with torch.no_grad():
         out = head(pyramid(torch.randn(2, 3, 32, 32)))

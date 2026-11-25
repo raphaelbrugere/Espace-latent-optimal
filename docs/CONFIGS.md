@@ -95,9 +95,11 @@ upsample: nearest
 
 | Neck | Classe (clés) | Sortie |
 |---|---|---|
-| `embed_norm` | `EmbedNorm` (`norm: true` (LayerNorm) ou `false` (embed tel quel)) | vecteur |
+| `embed_norm` | `EmbedNorm` (`norm: layernorm` ou `none` (embed tel quel)) | vecteur |
 | `fpn` | `FPNNeck` (`channels`, `levels`, `upsample`) | carte |
-| `conv_trunk` | `ConvTrunk` (`channels`, `target_stride`) | carte |
+| `conv_trunk` | `ConvTrunk` (`level`, `channels`) | carte |
+
+Note sur `fpn` : sur des cartes iso-stride (ViT simple), la pyramide dégénère en une somme de features de profondeurs différentes, sans gain de résolution ; cf. le simple feature pyramid de ViTDet (Li et al., 2022) pour en reconstruire une.
 
 | Tête | Classe | Entrée |
 |---|---|---|

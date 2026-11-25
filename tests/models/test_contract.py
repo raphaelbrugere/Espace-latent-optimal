@@ -1,6 +1,7 @@
 """Contrat Backbone / Head : empreinte des poids, verifications, sauvegarde des tetes."""
 
 import copy
+from functools import partial
 
 import pytest
 import torch
@@ -186,7 +187,7 @@ def test_make_neck_and_head_pass_only_requested_arguments(pyramid):
     fpn, _ = make_pair(FPNNeck, ConvSegHead, pyramid, num_classes=3)
     assert fpn.names == ["c4", "c8"]
 
-    _, det = make_pair(ConvTrunk, SoftArgmaxDecoder, pyramid, num_classes=2)
+    _, det = make_pair(partial(ConvTrunk, level="c8"), SoftArgmaxDecoder, pyramid, num_classes=2)
     assert det.classifier.out_features == 2
 
 

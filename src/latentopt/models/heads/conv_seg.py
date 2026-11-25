@@ -1,9 +1,7 @@
-"""Tete de segmentation semantique (config `conv_seg`, configs/head/conv_seg.yaml), issue du
-decodeur FPN (Lin et al., 2017).
+"""Tete de segmentation semantique : carte (B, C, H, W) -> logits par pixel (B, K, H, W).
 
-Elle lit les cartes fusionnees par un neck (`FPNNeck`, config `fpn`) et en fait des logits
-par pixel. La sortie est au stride le plus fin de `feature_info` ; le passage a la
-resolution cible (bilineaire) est laisse a la loss et a la metrique.
+La sortie reste a la resolution de la carte d'entree ; la mise a la resolution cible
+(bilineaire) est laissee a la loss et a la metrique.
 """
 
 import torch.nn as nn

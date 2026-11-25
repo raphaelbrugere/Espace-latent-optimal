@@ -74,28 +74,42 @@ def classification(
     )
 
 
-def segmentation(name: str, dataset: str, size: int, augment: v2.Transform | None = None) -> Task:
+def segmentation(
+    name: str,
+    dataset: str,
+    num_classes: int,
+    size: int,
+    epochs: int,
+    augment: v2.Transform | None = None,
+) -> Task:
     """Image en carre ; a l'evaluation, le masque garde sa resolution d'origine."""
     return Task(
         name=name,
-        num_classes=3,
+        num_classes=num_classes,
         primary_metric="miou",
         build=DATASETS[dataset].tasks()["seg"],
         eval_pipeline=T.Pipeline(T.square(size), native_target=True),
         train_pipeline=T.Pipeline(T.square(size), augment),
         loss=segmentation_loss,
-        metric=partial(M.MeanIoU, 3),
+        metric=partial(M.MeanIoU, num_classes),
         default_neck="fpn",
         default_head="conv_seg",
-        epochs=30,
+        epochs=epochs,
         collate_fn=T.collate_native,
     )
 
 
-def detection(name: str, dataset: str, size: int, augment: v2.Transform | None = None) -> Task:
+def detection(
+    name: str,
+    dataset: str,
+    num_classes: int,
+    size: int,
+    epochs: int,
+    augment: v2.Transform | None = None,
+) -> Task:
     return Task(
         name=name,
-        num_classes=2,
+        num_classes=num_classes,
         primary_metric="loc_acc",
         build=DATASETS[dataset].tasks()["det"],
         eval_pipeline=T.Pipeline(T.square(size)),
@@ -104,7 +118,7 @@ def detection(name: str, dataset: str, size: int, augment: v2.Transform | None =
         metric=M.LocalizationAccuracy,
         default_neck="conv_trunk",
         default_head="soft_argmax",
-        epochs=30,
+        epochs=epochs,
     )
 
 
@@ -114,11 +128,11 @@ TASKS = {
         classification("imagenette_cls", "imagenette", 10, T.center_crop(SIZE), 20),
         classification("flowers102_cls", "flowers102", 102, T.center_crop(SIZE), 30),
         classification("galaxy10_cls", "galaxy10", 10, T.square(SIZE), 20, "balanced_acc"),
-        segmentation("pets_seg", "oxford_pets", SIZE, augment=T.hflip()),
-        detection("pets_det", "oxford_pets", SIZE, augment=T.hflip()),
+        segmentation("pets_seg", "oxford_pets", 3, SIZE, 30, augment=T.hflip()),
+        detection("pets_det", "oxford_pets", 2, SIZE, 30, augment=T.hflip()),
         classification("synthetic_cls", "synthetic", 10, T.center_crop(SMOKE_SIZE), 20),
-        segmentation("synthetic_seg", "synthetic", SMOKE_SIZE, augment=T.hflip()),
-        detection("synthetic_det", "synthetic", SMOKE_SIZE, augment=T.hflip()),
+        segmentation("synthetic_seg", "synthetic", 3, SMOKE_SIZE, 30, augment=T.hflip()),
+        detection("synthetic_det", "synthetic", 2, SMOKE_SIZE, 30, augment=T.hflip()),
     )
 }
 

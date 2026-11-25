@@ -3,10 +3,6 @@
 Seul le chemin top-down est appris : la voie bottom-up est le backbone gele. Projections
 laterales 1x1 vers une largeur commune, upsampling nearest et somme, lissage 3x3. La sortie
 est au stride le plus fin de `feature_info`.
-
-Sur des cartes iso-stride (ViT simple), la pyramide degenere en une somme de features
-de profondeurs differentes, sans gain de resolution : cf. le simple feature pyramid de
-ViTDet (Li et al., 2022) pour en reconstruire une.
 """
 
 import torch.nn as nn

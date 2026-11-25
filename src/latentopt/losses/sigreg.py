@@ -20,6 +20,9 @@ class SIGReg(nn.Module):
     """(V, N, D) -> statistique d'Epps-Pulley moyennee sur les V vues et les directions."""
 
     def __init__(self, knots: int = 17, num_slices: int = 256, domain: float = 3.0) -> None:
+        """`knots` : points de la grille t (discretisation de l'integrale, regle des trapezes).
+        `num_slices` : directions 1D aleatoires. `domain` : domaine d'integration, t dans
+        [0, domain]."""
         super().__init__()
         self.num_slices = num_slices
         t = torch.linspace(0, domain, knots)

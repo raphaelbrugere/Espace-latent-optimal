@@ -3,6 +3,7 @@ dataset -> tete par defaut -> loss -> metrique sur les taches synthetiques."""
 
 import pytest
 import torch
+from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
 from latentopt.data.paths import PROJECT_ROOT
@@ -58,6 +59,8 @@ def test_synthetic_task_end_to_end(name, pyramid):
     """Dataset -> backbone -> tete par defaut -> loss (gradient) -> metrique principale."""
     t = tasks.get_task(name)
     neck_cfg, head_cfg = recipe.load("neck", t.default_neck), recipe.load("head", t.default_head)
+    if t.default_neck == "conv_trunk":  # le defaut (block12) est celui du ViT-S/8 du projet
+        neck_cfg = OmegaConf.merge(neck_cfg, {"level": "c8"})
     head = recipe.build(neck_cfg, head_cfg, pyramid, t.num_classes)
 
     x, y = next(iter(DataLoader(t.dataset("train", train=True), batch_size=4)))

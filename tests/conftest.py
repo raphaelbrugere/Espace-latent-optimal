@@ -102,6 +102,8 @@ def recipe_head():
 
     def build(name, backbone, num_classes, **neck):
         neck_name, head_name = PAIRS[name]
+        if neck_name == "conv_trunk":  # le defaut (block12) est celui du ViT-S/8 du projet
+            neck = {"level": backbone.feature_info[-1]["name"], **neck}
         cfg = OmegaConf.merge(recipe.load("neck", neck_name), neck)
         return recipe.build(cfg, recipe.load("head", head_name), backbone, num_classes)
 

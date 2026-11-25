@@ -18,6 +18,8 @@ PAIRS = {"linear": ("embed_norm", "linear"), "fpn": ("fpn", "conv_seg"),
 
 def from_recipe(name, backbone, num_classes, **neck):
     neck_name, head_name = PAIRS[name]
+    if neck_name == "conv_trunk":  # le defaut (block12) est celui du ViT-S/8 du projet
+        neck = {"level": "c8", **neck}
     cfg = OmegaConf.merge(recipe.load("neck", neck_name), neck)
     return recipe.build(cfg, recipe.load("head", head_name), backbone, num_classes)
 
@@ -46,7 +48,7 @@ CASES = {
     ),
     "linear_strict": (
         lambda p: LegacyLinear(p.embed_dim, 5, norm=False),
-        lambda p: from_recipe("linear", p, 5, norm=False),
+        lambda p: from_recipe("linear", p, 5, norm="none"),
     ),
     "fpn": (
         lambda p: LegacyFPN(p.feature_info, 3, channels=8),
@@ -62,7 +64,7 @@ CASES = {
     ),
     "soft_argmax_fine": (
         lambda p: LegacySoftArgmax(p.feature_info, 2, channels=8, target_stride=4),
-        lambda p: from_recipe("soft_argmax", p, 2, channels=8, target_stride=4),
+        lambda p: from_recipe("soft_argmax", p, 2, channels=8, level="c4"),
     ),
 }
 
@@ -137,6 +139,15 @@ def test_incompatible_neck_and_head_fail_early(pyramid):
 def test_embed_norm_without_norm_is_the_identity_on_embed(pyramid):
     """Le cas " pas de neck " d'origine : sonde lineaire stricte, `embed` rendu tel quel."""
     x = feats(pyramid)
-    neck = EmbedNorm(pyramid.embed_dim, norm=False)
+    neck = EmbedNorm(pyramid.embed_dim, norm="none")
     assert neck.in_keys == ["embed"] and neck.out_kind == "vector"
     assert torch.equal(neck(x), x["embed"]) and not list(neck.parameters())
+
+
+def test_embed_norm_rejects_unknown_norm(pyramid):
+    with pytest.raises(ValueError, match="layernorm.*none"):
+        EmbedNorm(pyramid.embed_dim, norm="batchnorm")
+
+
+def test_embed_norm_state_dict_keys_are_stable(pyramid):
+    assert list(EmbedNorm(pyramid.embed_dim).state_dict()) == ["norm.weight", "norm.bias"]

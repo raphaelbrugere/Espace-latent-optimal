@@ -75,8 +75,11 @@ def same_weights(a: torch.nn.Module, b: torch.nn.Module, atol: float = 0.0) -> b
 
 @pytest.mark.parametrize("task", ["synthetic_cls", "synthetic_seg", "synthetic_det"])
 def test_head_training_is_reproducible(isolated_data, task):
-    a = train_head(isolated_data, f"task={task}")
-    b = train_head(isolated_data, f"task={task}")
+    extra = (
+        ["neck=conv_trunk", "neck.level=block2"] if task == "synthetic_det" else []
+    )  # carte la plus profonde
+    a = train_head(isolated_data, f"task={task}", *extra)
+    b = train_head(isolated_data, f"task={task}", *extra)
     assert same_weights(a.downstream, b.downstream)
     assert weights_hash(a.backbone) == weights_hash(b.backbone)
 

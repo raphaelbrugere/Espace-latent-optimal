@@ -8,22 +8,22 @@ from torch import Tensor
 class ConvTrunk(nn.Module):
     """Une carte du backbone (B, C, H, W) -> (B, channels, H, W) : deux conv 3x3 + BN + ReLU.
 
-    La carte lue est celle dont le stride est le plus proche de `target_stride`.
+    `level` : nom de la carte de `feature_info` a lire (meme convention que `levels` de
+    FPNNeck). Le defaut est dans configs/neck/conv_trunk.yaml.
     """
 
     out_kind = "map"
 
-    def __init__(
-        self, feature_info: list[dict], channels: int = 128, target_stride: int = 8
-    ) -> None:
+    def __init__(self, feature_info: list[dict], level: str, channels: int = 128) -> None:
         super().__init__()
-        # stride le plus proche de target_stride ; a egalite (ViT simple), le plus profond
-        level = min(reversed(feature_info), key=lambda f: abs(f["stride"] - target_stride))
-        self.name = level["name"]
+        by_name = {f["name"]: f for f in feature_info}
+        if level not in by_name:
+            raise ValueError(f"niveaux inconnus du backbone : {[level]} (choix : {list(by_name)})")
+        self.name = level
         self.in_keys = [self.name]  # entrees lues dans le dict du backbone
         self.out_dim = channels
 
-        self.conv1 = nn.Conv2d(level["channels"], channels, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(by_name[level]["channels"], channels, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(channels)
         self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(channels)

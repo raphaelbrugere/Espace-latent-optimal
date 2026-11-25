@@ -12,12 +12,12 @@ def feats_of(backbone, size=64, batch=2):
 # --- linear -------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("norm", [True, False])
+@pytest.mark.parametrize("norm", ["layernorm", "none"])
 def test_linear_shapes(pyramid, recipe_head, norm):
     head = recipe_head("linear", pyramid, 7, norm=norm)
     assert head.in_keys == ["embed"]
     assert head({"embed": torch.randn(5, pyramid.embed_dim)}).shape == (5, 7)
-    assert isinstance(head.neck.norm, torch.nn.LayerNorm) is norm
+    assert isinstance(head.neck.norm, torch.nn.LayerNorm) is (norm == "layernorm")
 
 
 def test_linear_with_norm_is_scale_invariant(pyramid, recipe_head):
@@ -69,13 +69,26 @@ def test_fpn_on_iso_stride_vit(tiny_vit, recipe_head):
 # --- soft_argmax --------------------------------------------------------------------------
 
 
-def test_soft_argmax_picks_map_closest_to_target_stride(pyramid, recipe_head):
-    assert recipe_head("soft_argmax", pyramid, 2).in_keys == ["c8"]
-    assert recipe_head("soft_argmax", pyramid, 2, target_stride=4).in_keys == ["c4"]
+def test_soft_argmax_reads_the_map_named_by_level(pyramid, recipe_head):
+    assert recipe_head("soft_argmax", pyramid, 2, level="c8").in_keys == ["c8"]
+    assert recipe_head("soft_argmax", pyramid, 2, level="c4").in_keys == ["c4"]
 
 
-def test_soft_argmax_prefers_deepest_map_on_ties(tiny_vit, recipe_head):
-    assert recipe_head("soft_argmax", tiny_vit, 2).in_keys == ["block2"]
+def test_soft_argmax_rejects_unknown_level(pyramid, recipe_head):
+    with pytest.raises(ValueError, match="niveaux inconnus du backbone"):
+        recipe_head("soft_argmax", pyramid, 2, level="c16")
+
+
+def test_conv_trunk_default_level_is_the_deepest_map_of_the_project_vit():
+    """Le defaut de configs/neck/conv_trunk.yaml : derniere carte de vit_s8 / DINO."""
+    from omegaconf import OmegaConf
+
+    from latentopt.models import recipe
+
+    level = OmegaConf.to_container(recipe.load("neck", "conv_trunk"))["level"]
+    for name in ("vit_s8", "vit_s8_dino"):
+        blocks = OmegaConf.load(f"configs/backbone/{name}.yaml").blocks
+        assert level == f"block{blocks[-1] + 1}", name
 
 
 def test_soft_argmax_output_is_valid_box(pyramid, recipe_head):
