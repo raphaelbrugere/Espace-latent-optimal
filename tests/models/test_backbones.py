@@ -5,8 +5,10 @@ import json
 import pytest
 import torch
 from omegaconf import OmegaConf
+from torchvision.transforms.v2 import functional as TF
 
 from latentopt import run
+from latentopt.models import contract
 from latentopt.models.backbones.archs.vit import TimmViT
 from latentopt.models.backbones.checkpoint import from_run, resolve_run
 from latentopt.models.contract import check_backbone, weights_hash
@@ -27,6 +29,29 @@ def test_vit_feature_info_and_outputs(tiny_vit):
     assert set(out) == {"block1", "block2", "embed"}
     assert out["embed"].shape == (2, 24)
     assert out["block1"].shape == (2, 192, 2, 2)
+
+
+def test_vit_normalizes_its_input_like_the_former_transform_did(tiny_vit):
+    x = torch.rand(2, 3, 32, 32)  # [0, 1], comme les transforms
+    old = TF.normalize(x, contract.IMAGENET_MEAN, contract.IMAGENET_STD)  # ancienne chaine
+    with torch.no_grad():
+        out = tiny_vit(x)
+        # le meme backbone, avec ses buffers neutralises, recoit l'entree deja normalisee
+        tiny_vit.mean.zero_(), tiny_vit.std.fill_(1.0)
+        ref = tiny_vit(old)
+    for k in out:
+        assert torch.allclose(out[k], ref[k], atol=1e-6), k
+
+
+def test_normalization_statistics_are_buffers_in_state_dict_and_hash(tiny_vit):
+    sd = tiny_vit.state_dict()
+    assert sd["mean"].shape == sd["std"].shape == (1, 3, 1, 1)
+    assert torch.allclose(sd["mean"].flatten(), torch.tensor(contract.IMAGENET_MEAN))
+    assert torch.allclose(sd["std"].flatten(), torch.tensor(contract.IMAGENET_STD))
+    assert not any(p is tiny_vit.mean for p in tiny_vit.parameters())
+    before = weights_hash(tiny_vit)
+    tiny_vit.mean += 0.1
+    assert weights_hash(tiny_vit) != before
 
 
 def test_vit_without_projection_exposes_cls_width():

@@ -1,13 +1,18 @@
-"""Transforms du protocole d'evaluation, appliques conjointement a (image, cible).
+"""Transforms des taches aval (evaluation et entrainement des tetes), appliques
+conjointement a (image, cible) pour garder les deux alignees : un flip retourne aussi le
+masque ou la boite. Les vues du pre-entrainement sont ailleurs (methods/lejepa.py).
 
-Les transforms d'eval font partie du protocole : les modifier change les scores et
-casse la comparabilite avec les scores existants. Les transforms d'entrainement
-`hflip` (probabilite de retournement horizontal : 0.5 pour la baseline ; 0 et 1 pour
-les deux variantes du cache de features) sont l'augmentation minimale de la baseline.
+Nommes par tache puis variante (`Cls...`, `Seg...`, `Det...`), comme les cles de
+`DatasetSpec.tasks()`. Les transforms d'eval font partie du protocole : les modifier change
+les scores et casse la comparabilite avec les scores existants. A l'entrainement, la seule
+augmentation est `hflip`, la probabilite de retournement horizontal (0.5 pour la baseline).
+
+Les images sortent en float32 dans [0, 1], sans normalisation : c'est le backbone qui
+normalise (voir models/contract.py).
 """
 
 import random
-from typing import Any
+from typing import Any, Protocol, TypeVar
 
 import numpy as np
 import torch
@@ -15,15 +20,19 @@ from PIL import Image
 from torch import Tensor
 from torchvision.transforms.v2 import functional as TF
 
-IMAGENET_MEAN = (0.485, 0.456, 0.406)
-IMAGENET_STD = (0.229, 0.224, 0.225)
+Target = TypeVar("Target", contravariant=True)
 
 
-def normalize(img: Image.Image) -> Tensor:
-    """PIL -> (3, H, W) float32 dans [0, 1], puis centre-reduit aux statistiques ImageNet."""
-    return TF.normalize(
-        TF.to_dtype(TF.to_image(img), torch.float32, scale=True), IMAGENET_MEAN, IMAGENET_STD
-    )
+class JointTransform(Protocol[Target]):
+    """(image PIL, cible brute de la source) -> (image (3, size, size) float32 [0, 1], cible)."""
+
+    def __call__(self, img: Image.Image, target: Target) -> tuple[Tensor, Any]: ...
+
+
+def to_tensor(img: Image.Image) -> Tensor:
+    """PIL -> (3, H, W) float32 dans [0, 1]. Pas de normalisation : c'est le backbone qui s'en
+    charge (models/contract.py)."""
+    return TF.to_dtype(TF.to_image(img), torch.float32, scale=True)
 
 
 def check_hflip(hflip: float) -> float:
@@ -40,27 +49,27 @@ def mask_to_tensor(mask: Image.Image) -> Tensor:
     return torch.from_numpy(np.array(mask, dtype=np.int64))
 
 
-class CenterCrop:
-    """Classification : petit cote a `size`, puis crop central (exemple minimal LeJEPA)."""
+class ClsCenterCrop:
+    """Classification : petit cote a `size`, puis crop central carre."""
 
     def __init__(self, size: int) -> None:
         self.size = size
 
     def __call__(self, img: Image.Image, label: int) -> tuple[Tensor, int]:
-        return normalize(TF.center_crop(TF.resize(img, self.size), self.size)), label
+        return to_tensor(TF.center_crop(TF.resize(img, self.size), self.size)), label
 
 
-class SquareResize:
+class ClsSquareResize:
     """Classification d'objets centres (Galaxy10) : resize anisotrope, sans crop."""
 
     def __init__(self, size: int) -> None:
         self.size = size
 
     def __call__(self, img: Image.Image, label: int) -> tuple[Tensor, int]:
-        return normalize(TF.resize(img, [self.size, self.size])), label
+        return to_tensor(TF.resize(img, [self.size, self.size])), label
 
 
-class SegmentationTransform:
+class SegTransform:
     """Image en carre `size` (scaling anisotrope reversible).
 
     Eval (`native_mask=True`) : le masque garde sa resolution native ; la metrique y
@@ -79,10 +88,10 @@ class SegmentationTransform:
             )
         if self.hflip and random.random() < self.hflip:
             img, mask = TF.hflip(img), TF.hflip(mask)
-        return normalize(img), mask_to_tensor(mask)
+        return to_tensor(img), mask_to_tensor(mask)
 
 
-class DetectionTransform:
+class DetTransform:
     """Image en carre `size`. Les boites sont normalisees dans [0, 1] et l'IoU entre
     boites alignees est invariante par scaling des axes : aucune correction a faire."""
 
@@ -92,7 +101,7 @@ class DetectionTransform:
     def __call__(
         self, img: Image.Image, target: dict[str, Any]
     ) -> tuple[Tensor, dict[str, Tensor]]:
-        img = normalize(TF.resize(img, [self.size, self.size]))
+        img = to_tensor(TF.resize(img, [self.size, self.size]))
         box = target["box"].clone()
         if self.hflip and random.random() < self.hflip:
             img, box = TF.hflip(img), torch.stack([1 - box[2], box[1], 1 - box[0], box[3]])

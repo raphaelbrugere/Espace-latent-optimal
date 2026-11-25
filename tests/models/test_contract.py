@@ -75,10 +75,16 @@ def test_check_backbone_restores_training_mode(pyramid):
     assert pyramid.training
 
 
-@pytest.mark.parametrize("attr", ["feature_info", "embed_dim"])
+@pytest.mark.parametrize("attr", ["feature_info", "embed_dim", "mean", "std"])
 def test_check_backbone_requires_attributes(pyramid, attr):
     delattr(pyramid, attr)
     with pytest.raises(AttributeError, match=attr):
+        contract.check_backbone(pyramid)
+
+
+def test_check_backbone_requires_normalization_buffers_of_shape_1_3_1_1(pyramid):
+    pyramid.mean = torch.zeros(3)
+    with pytest.raises(ValueError, match="mean"):
         contract.check_backbone(pyramid)
 
 

@@ -16,12 +16,12 @@ CPU = torch.device("cpu")
 
 
 def test_variants_without_flip_is_identity():
-    t = T.CenterCrop(32)
+    t = T.ClsCenterCrop(32)
     assert Fe.variants(t) == {"": t}
 
 
 def test_variants_with_flip_gives_two_deterministic_copies():
-    t = T.DetectionTransform(32, hflip=0.5)
+    t = T.DetTransform(32, hflip=0.5)
     v = Fe.variants(t)
     assert set(v) == {"", "flip"}
     assert v[""].hflip == 0.0 and v["flip"].hflip == 1.0

@@ -14,6 +14,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from latentopt.models.contract import normalize_input, register_input_norm
+
 TINY_VIT = {
     "_target_": "latentopt.models.backbones.archs.vit.TimmViT",
     "arch": "vit_tiny_patch16_224",
@@ -32,6 +34,7 @@ class PyramidBackbone(nn.Module):
         self.stem = nn.Conv2d(3, 8, kernel_size=4, stride=4)
         self.down = nn.Conv2d(8, 12, kernel_size=2, stride=2)
         self.proj = nn.Linear(12, embed_dim)
+        register_input_norm(self)
         self.embed_dim = embed_dim
         self.feature_info = [
             {"name": "c4", "channels": 8, "stride": 4},
@@ -39,7 +42,7 @@ class PyramidBackbone(nn.Module):
         ]
 
     def forward(self, x):
-        c4 = F.relu(self.stem(x))
+        c4 = F.relu(self.stem(normalize_input(self, x)))
         c8 = F.relu(self.down(c4))
         return {"c4": c4, "c8": c8, "embed": self.proj(c8.mean((2, 3)))}
 

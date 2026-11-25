@@ -33,8 +33,8 @@ class Task:
     num_classes: int
     primary_metric: str
     build: Callable  # (split, transform) -> Dataset
-    eval_transform: Callable
-    train_transform: Callable  # augmentation minimale de la baseline
+    eval_transform: T.JointTransform
+    train_transform: T.JointTransform  # augmentation minimale de la baseline
     loss: Callable
     metric: Callable  # () -> metrique vierge
     default_neck: str  # neck de la baseline : configs/neck/<nom>.yaml
@@ -50,7 +50,7 @@ def classification(
     name: str,
     build: Callable,
     num_classes: int,
-    transform: Callable,
+    transform: T.JointTransform,
     epochs: int,
     metric: str | None = None,
 ) -> Task:
@@ -77,8 +77,8 @@ def segmentation(name: str, build: Callable, size: int) -> Task:
         num_classes=3,
         primary_metric="miou",
         build=build,
-        eval_transform=T.SegmentationTransform(size, native_mask=True),
-        train_transform=T.SegmentationTransform(size, native_mask=False, hflip=0.5),
+        eval_transform=T.SegTransform(size, native_mask=True),
+        train_transform=T.SegTransform(size, native_mask=False, hflip=0.5),
         loss=segmentation_loss,
         metric=partial(M.MeanIoU, 3),
         default_neck="fpn",
@@ -94,8 +94,8 @@ def detection(name: str, build: Callable, size: int) -> Task:
         num_classes=2,
         primary_metric="loc_acc",
         build=build,
-        eval_transform=T.DetectionTransform(size),
-        train_transform=T.DetectionTransform(size, hflip=0.5),
+        eval_transform=T.DetTransform(size),
+        train_transform=T.DetTransform(size, hflip=0.5),
         loss=detection_loss,
         metric=M.LocalizationAccuracy,
         default_neck="conv_trunk",
@@ -112,20 +112,24 @@ def builder(dataset: str, kind: str) -> Callable:
 TASKS = {
     t.name: t
     for t in (
-        classification("imagenette_cls", builder("imagenette", "cls"), 10, T.CenterCrop(SIZE), 20),
-        classification("flowers102_cls", builder("flowers102", "cls"), 102, T.CenterCrop(SIZE), 30),
+        classification(
+            "imagenette_cls", builder("imagenette", "cls"), 10, T.ClsCenterCrop(SIZE), 20
+        ),
+        classification(
+            "flowers102_cls", builder("flowers102", "cls"), 102, T.ClsCenterCrop(SIZE), 30
+        ),
         classification(
             "galaxy10_cls",
             builder("galaxy10", "cls"),
             10,
-            T.SquareResize(SIZE),
+            T.ClsSquareResize(SIZE),
             20,
             "balanced_acc",
         ),  # fmt: skip
         segmentation("pets_seg", builder("oxford_pets", "seg"), SIZE),
         detection("pets_det", builder("oxford_pets", "det"), SIZE),
         classification(
-            "synthetic_cls", builder("synthetic", "cls"), 10, T.CenterCrop(SMOKE_SIZE), 20
+            "synthetic_cls", builder("synthetic", "cls"), 10, T.ClsCenterCrop(SMOKE_SIZE), 20
         ),
         segmentation("synthetic_seg", builder("synthetic", "seg"), SMOKE_SIZE),
         detection("synthetic_det", builder("synthetic", "det"), SMOKE_SIZE),

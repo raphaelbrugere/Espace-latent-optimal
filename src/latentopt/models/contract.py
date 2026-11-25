@@ -4,11 +4,19 @@ Backbone
     attributs  embed_dim: int
                feature_info: list[{"name": str, "channels": int, "stride": int}],
                              du stride le plus fin au plus grossier
-    forward    x (B, 3, H, W), normalise ImageNet, H et W multiples du plus grand stride
+    buffers    mean, std: (1, 3, 1, 1), la normalisation d'entree que le backbone attend
+               (voir `register_input_norm`)
+    forward    x (B, 3, H, W) float32 dans [0, 1], H et W multiples du plus grand stride ;
+               le backbone le normalise lui-meme (`normalize_input`) avant tout calcul
                -> {"embed": (B, embed_dim),
                    f["name"]: (B, f["channels"], H / f["stride"], W / f["stride"]) pour f}
     regles     <= BACKBONE_MAX_PARAMS parametres, deterministe en eval(), reconstructible
                depuis sa config puis son state_dict
+
+Les transforms et les vues renvoient donc des images dans [0, 1] : la normalisation est une
+propriete du backbone (un backbone externe peut en attendre une autre), pas des donnees.
+`mean` et `std` sont des buffers persistants : ils entrent dans le state_dict, donc dans
+`weights_hash` et dans la cle du cache de features.
 
 Neck
     construit avec (feature_info, embed_dim) + ses hyperparametres
@@ -43,6 +51,24 @@ import torch
 import torch.nn as nn
 
 BACKBONE_MAX_PARAMS = 30_000_000
+
+IMAGENET_MEAN = (0.485, 0.456, 0.406)
+IMAGENET_STD = (0.229, 0.224, 0.225)
+
+
+def register_input_norm(
+    backbone: nn.Module,
+    mean: tuple[float, float, float] = IMAGENET_MEAN,
+    std: tuple[float, float, float] = IMAGENET_STD,
+) -> None:
+    """Enregistre les buffers persistants `mean` et `std` (1, 3, 1, 1) du backbone."""
+    backbone.register_buffer("mean", torch.tensor(mean).view(1, 3, 1, 1), persistent=True)
+    backbone.register_buffer("std", torch.tensor(std).view(1, 3, 1, 1), persistent=True)
+
+
+def normalize_input(backbone: nn.Module, x: torch.Tensor) -> torch.Tensor:
+    """x (B, 3, H, W) dans [0, 1] -> centre-reduit avec les buffers du backbone."""
+    return (x - backbone.mean) / backbone.std
 
 
 def count_params(module: nn.Module) -> int:
@@ -98,9 +124,12 @@ class Downstream(nn.Module):
 def check_backbone(backbone: nn.Module, size: int = 64) -> None:
     """Echoue tot, avec un message clair, si le backbone ne respecte pas le contrat.
     Verifiee par les tests de conformite, jamais appelee pendant un run."""
-    for attr in ("feature_info", "embed_dim"):
+    for attr in ("feature_info", "embed_dim", "mean", "std"):
         if not hasattr(backbone, attr):
             raise AttributeError(f"le backbone doit definir `{attr}` (voir models/contract.py)")
+    for attr in ("mean", "std"):
+        if tuple(getattr(backbone, attr).shape) != (1, 3, 1, 1):
+            raise ValueError(f"`{attr}` doit avoir la forme (1, 3, 1, 1)")
     strides = [f["stride"] for f in backbone.feature_info]
     if strides != sorted(strides):
         raise ValueError(

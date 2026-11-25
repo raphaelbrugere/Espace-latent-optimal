@@ -9,12 +9,16 @@ si `embed_dim` est donne, une projection lineaire apprise avec le backbone penda
 pre-entrainement. `embed_dim=None` : pas de projection, `embed` = token CLS (largeur
 du ViT), comme dans le protocole d'evaluation de DINO.
 
+Entree dans [0, 1], normalisee par le backbone (contrat : models/contract.py).
+
 Poids aleatoires uniquement : les poids externes sont charges par `backbones/external/`.
 """
 
 import timm
 import torch.nn as nn
 from torch import Tensor
+
+from latentopt.models.contract import normalize_input, register_input_norm
 
 
 class TimmViT(nn.Module):
@@ -41,6 +45,7 @@ class TimmViT(nn.Module):
             dynamic_img_size=True,  # pre-entrainement et taches a des resolutions differentes
         )
         self.vit.set_grad_checkpointing(grad_checkpointing)
+        register_input_norm(self)  # statistiques ImageNet : celles des poids timm et DINO
 
         self.blocks = list(blocks)
         self.embed_dim = embed_dim or self.vit.num_features
@@ -52,7 +57,7 @@ class TimmViT(nn.Module):
 
     def forward(self, x: Tensor) -> dict[str, Tensor]:
         final, maps = self.vit.forward_intermediates(
-            x, indices=self.blocks, intermediates_only=False
+            normalize_input(self, x), indices=self.blocks, intermediates_only=False
         )
         out = {f["name"]: m for f, m in zip(self.feature_info, maps, strict=True)}
         out["embed"] = self.vit.forward_head(final)

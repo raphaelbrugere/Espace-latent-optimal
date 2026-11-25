@@ -28,7 +28,6 @@ from torch import Tensor
 from torchvision.ops import MLP
 from torchvision.transforms import v2
 
-from latentopt.data.transforms import IMAGENET_MEAN, IMAGENET_STD
 from latentopt.losses import SIGReg
 from latentopt.models.contract import Downstream
 from latentopt.models.heads import LinearHead
@@ -51,8 +50,7 @@ class MultiViewTransform:
                 v2.RandomApply([v2.RandomSolarize(threshold=128)], p=0.2),
                 v2.RandomHorizontalFlip(),
                 v2.ToImage(),
-                v2.ToDtype(torch.float32, scale=True),
-                v2.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+                v2.ToDtype(torch.float32, scale=True),  # [0, 1] : le backbone normalise
             ]
         )
 

@@ -60,7 +60,7 @@ Espace-latent-optimal/
 │   │   ├── paths.py            # DATA_ROOT, FEATURES_ROOT, MODELS_ROOT
 │   │   └── transforms.py       # transforms du protocole d'évaluation
 │   ├── models/                 # composants des réseaux
-│   │   ├── contract.py         # contrat Backbone / Neck / Head : vérifications, empreintes, neck.pt et head.pt
+│   │   ├── contract.py         # contrat Backbone / Neck / Head (entrée dans [0, 1], le backbone normalise) : vérifications, empreintes, neck.pt et head.pt
 │   │   ├── backbones/          # extracteurs de features
 │   │   │   ├── archs/          # architectures au contrat, poids aléatoires (ViT ; plus tard MobileNetV2, ConvNeXt)
 │   │   │   ├── external/       # poids externes (DINO…) : téléchargement et chargement dans une archi d'archs/

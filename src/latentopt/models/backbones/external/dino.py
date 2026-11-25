@@ -33,7 +33,10 @@ def download() -> Path:
 
 
 def load_into(model: TimmViT, path: Path) -> None:
-    """Charge strictement le safetensors timm (cles remappees par `checkpoint_filter_fn`)."""
+    """Charge strictement le safetensors timm (cles remappees par `checkpoint_filter_fn`).
+
+    Seul `model.vit` est charge : les buffers `mean` / `std` (statistiques ImageNet, celles de
+    DINO) restent ceux du TimmViT."""
     if not path.exists():
         raise FileNotFoundError(f"{path} absent : lance `uv run lo data prepare {NAME}`")
     state_dict = checkpoint_filter_fn(load_file(str(path)), model.vit)
