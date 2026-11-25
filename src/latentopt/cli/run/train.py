@@ -34,7 +34,7 @@ from torch.utils.data import DataLoader
 
 from latentopt import hub, run
 from latentopt.config import CONFIGS_DIR, register_resolvers
-from latentopt.evaluation.features import CachedFeatures, collate, load_or_extract
+from latentopt.evaluation.features import CachedFeatures, FeatureStore, collate
 from latentopt.evaluation.tasks import Task, get_task
 from latentopt.methods import FrozenBackboneModule
 from latentopt.models import recipe
@@ -88,26 +88,19 @@ def fill_defaults(cfg: DictConfig) -> None:
 def cached_datasets(
     cfg: DictConfig, task: Task, backbone: torch.nn.Module, keys: Sequence[str]
 ) -> tuple[CachedFeatures, CachedFeatures]:
-    """Features train (deux variantes si retournement) et val, extraites ou relues."""
+    """Features train (une entree par version de l'augmentation) et val, extraites ou relues."""
     use_cuda = run.resolve_device(cfg.env.device) == "cuda"
-    common = dict(
-        backbone=backbone,
-        sha=weights_hash(backbone),
-        task=task,
-        keys=keys,
-        batch_size=256,
-        num_workers=cfg.env.num_workers,
+    store = FeatureStore(
+        backbone,
         device=torch.device("cuda" if use_cuda else "cpu"),
         precision=cfg.precision,
+        num_workers=cfg.env.num_workers,
         info={"backbone": OmegaConf.to_container(cfg.backbone, resolve=True)},
     )
-    train = load_or_extract(split="train", transform=task.train_transform, **common)
-    val = load_or_extract(split="val", transform=task.eval_transform, **common)
+    train = store.dataset(task, "train", task.train_pipeline, keys)
+    val = store.dataset(task, "val", task.eval_pipeline, keys)
     backbone.cpu()
-    return (
-        CachedFeatures(train, getattr(task.train_transform, "hflip", 0.0)),
-        CachedFeatures(val),
-    )
+    return train, val
 
 
 def build(cfg: DictConfig) -> tuple[FrozenBackboneModule, DataLoader, DataLoader]:
@@ -230,6 +223,11 @@ def main(cfg: DictConfig) -> None:
         "names": {"neck": neck_name, "head": head_name},
         "classes": {"neck": type(downstream.neck).__name__, "head": type(downstream.head).__name__},
         "params": {"neck": count_params(downstream.neck), "head": count_params(downstream.head)},
+        # empreintes du traitement des images (data/transforms.py), verifiees par `lo eval`
+        "pipelines": {
+            "train": task.train_pipeline.fingerprint(),
+            "eval": task.eval_pipeline.fingerprint(),
+        },
         "backbone_sha256": sha,
         "neck_sha256": neck_sha,
         "backbone_params": count_params(backbone),

@@ -1,7 +1,9 @@
-"""Registre des taches downstream : dataset, transforms, loss, metrique.
+"""Registre des taches downstream : dataset, traitement des images, loss, metrique.
 
-Cinq taches de protocole (entree 128px, splits figes, transforms et metriques fixes, voir
-docs/DATASETS.md), plus trois taches synthetiques pour le smoke run (64px).
+Cinq taches de protocole (entree 128px, splits figes, traitement et metriques fixes, voir
+docs/DATASETS.md), plus trois taches synthetiques pour le smoke run (64px). Chaque tache
+declare sa preparation des images (`prepare`, protocole) et son augmentation a
+l'entrainement des tetes (`augment`, None = aucune) : voir data/transforms.py.
 
 `default_neck`, `default_head` et `epochs` forment le couple neck + tete de la baseline : choix par
 defaut, remplacables (`neck=...`, `head=...`, `epochs=...`), contrairement au protocole.
@@ -14,6 +16,7 @@ from typing import Any
 
 import torch
 import torch.nn.functional as F
+from torchvision.transforms import v2
 
 from latentopt.data import transforms as T
 from latentopt.data.datasets.registry import BY_NAME as DATASETS
@@ -32,9 +35,9 @@ class Task:
     name: str
     num_classes: int
     primary_metric: str
-    build: Callable  # (split, transform) -> Dataset
-    eval_transform: T.JointTransform
-    train_transform: T.JointTransform  # augmentation minimale de la baseline
+    build: Callable  # (split, pipeline) -> Dataset, fourni par le dataset (DatasetSpec.tasks)
+    eval_pipeline: T.Pipeline  # sans augmentation
+    train_pipeline: T.Pipeline  # avec l'augmentation de la tache, s'il y en a une
     loss: Callable
     metric: Callable  # () -> metrique vierge
     default_neck: str  # neck de la baseline : configs/neck/<nom>.yaml
@@ -43,26 +46,26 @@ class Task:
     collate_fn: Callable | None = None  # split d'eval seulement
 
     def dataset(self, split: str, train: bool = False) -> Any:
-        return self.build(split, self.train_transform if train else self.eval_transform)
+        return self.build(split, self.train_pipeline if train else self.eval_pipeline)
 
 
 def classification(
     name: str,
-    build: Callable,
+    dataset: str,
     num_classes: int,
-    transform: T.JointTransform,
+    prepare: v2.Transform,
     epochs: int,
     metric: str | None = None,
+    augment: v2.Transform | None = None,
 ) -> Task:
-    """Pas d'augmentation a l'entrainement (baseline) : train = eval."""
     balanced = metric == "balanced_acc"
     return Task(
         name=name,
         num_classes=num_classes,
         primary_metric=metric or "top1",
-        build=build,
-        eval_transform=transform,
-        train_transform=transform,
+        build=DATASETS[dataset].tasks()["cls"],
+        eval_pipeline=T.Pipeline(prepare),
+        train_pipeline=T.Pipeline(prepare, augment),
         loss=F.cross_entropy,
         metric=partial(M.BalancedAccuracy, num_classes) if balanced else M.Top1,
         default_neck="embed_norm",
@@ -71,14 +74,15 @@ def classification(
     )
 
 
-def segmentation(name: str, build: Callable, size: int) -> Task:
+def segmentation(name: str, dataset: str, size: int, augment: v2.Transform | None = None) -> Task:
+    """Image en carre ; a l'evaluation, le masque garde sa resolution d'origine."""
     return Task(
         name=name,
         num_classes=3,
         primary_metric="miou",
-        build=build,
-        eval_transform=T.SegTransform(size, native_mask=True),
-        train_transform=T.SegTransform(size, native_mask=False, hflip=0.5),
+        build=DATASETS[dataset].tasks()["seg"],
+        eval_pipeline=T.Pipeline(T.square(size), native_target=True),
+        train_pipeline=T.Pipeline(T.square(size), augment),
         loss=segmentation_loss,
         metric=partial(M.MeanIoU, 3),
         default_neck="fpn",
@@ -88,14 +92,14 @@ def segmentation(name: str, build: Callable, size: int) -> Task:
     )
 
 
-def detection(name: str, build: Callable, size: int) -> Task:
+def detection(name: str, dataset: str, size: int, augment: v2.Transform | None = None) -> Task:
     return Task(
         name=name,
         num_classes=2,
         primary_metric="loc_acc",
-        build=build,
-        eval_transform=T.DetTransform(size),
-        train_transform=T.DetTransform(size, hflip=0.5),
+        build=DATASETS[dataset].tasks()["det"],
+        eval_pipeline=T.Pipeline(T.square(size)),
+        train_pipeline=T.Pipeline(T.square(size), augment),
         loss=detection_loss,
         metric=M.LocalizationAccuracy,
         default_neck="conv_trunk",
@@ -104,35 +108,17 @@ def detection(name: str, build: Callable, size: int) -> Task:
     )
 
 
-def builder(dataset: str, kind: str) -> Callable:
-    """Constructeur de splits `kind` ("cls", "seg", "det") du dataset `dataset`."""
-    return DATASETS[dataset].tasks()[kind]
-
-
 TASKS = {
     t.name: t
     for t in (
-        classification(
-            "imagenette_cls", builder("imagenette", "cls"), 10, T.ClsCenterCrop(SIZE), 20
-        ),
-        classification(
-            "flowers102_cls", builder("flowers102", "cls"), 102, T.ClsCenterCrop(SIZE), 30
-        ),
-        classification(
-            "galaxy10_cls",
-            builder("galaxy10", "cls"),
-            10,
-            T.ClsSquareResize(SIZE),
-            20,
-            "balanced_acc",
-        ),  # fmt: skip
-        segmentation("pets_seg", builder("oxford_pets", "seg"), SIZE),
-        detection("pets_det", builder("oxford_pets", "det"), SIZE),
-        classification(
-            "synthetic_cls", builder("synthetic", "cls"), 10, T.ClsCenterCrop(SMOKE_SIZE), 20
-        ),
-        segmentation("synthetic_seg", builder("synthetic", "seg"), SMOKE_SIZE),
-        detection("synthetic_det", builder("synthetic", "det"), SMOKE_SIZE),
+        classification("imagenette_cls", "imagenette", 10, T.center_crop(SIZE), 20),
+        classification("flowers102_cls", "flowers102", 102, T.center_crop(SIZE), 30),
+        classification("galaxy10_cls", "galaxy10", 10, T.square(SIZE), 20, "balanced_acc"),
+        segmentation("pets_seg", "oxford_pets", SIZE, augment=T.hflip()),
+        detection("pets_det", "oxford_pets", SIZE, augment=T.hflip()),
+        classification("synthetic_cls", "synthetic", 10, T.center_crop(SMOKE_SIZE), 20),
+        segmentation("synthetic_seg", "synthetic", SMOKE_SIZE, augment=T.hflip()),
+        detection("synthetic_det", "synthetic", SMOKE_SIZE, augment=T.hflip()),
     )
 }
 

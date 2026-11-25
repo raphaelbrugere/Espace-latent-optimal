@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 import torch
 from PIL import Image
+from torchvision import tv_tensors
 
 from latentopt.data.datasets import synthetic
 from latentopt.data.datasets.base import Subset, require
@@ -44,19 +45,21 @@ def test_blobs_mask_is_aligned_and_has_three_classes():
     src = synthetic.BlobsSource(10, seed=0)
     for i in range(len(src)):
         img, mask = src[i]
-        assert img.size == mask.size == (96, 72)  # non carre, comme les vrais masques
-        assert mask.mode == "L"
-        assert set(np.unique(np.asarray(mask))) <= {0, 1, 2}
+        assert isinstance(mask, tv_tensors.Mask)  # format torchvision, comme Pets
+        assert img.size == (96, 72) and mask.shape == (72, 96)  # non carre, comme les vrais
+        assert set(mask.unique().tolist()) <= {0, 1, 2}
 
 
-def test_heads_box_is_valid_and_normalized():
+def test_heads_box_is_valid_and_in_pixels():
     src = synthetic.HeadsSource(50, seed=0)
     for i in range(len(src)):
-        _, target = src[i]
+        img, target = src[i]
         box = target["box"]
-        assert box.shape == (4,) and box.dtype == torch.float32
-        assert (box >= 0).all() and (box <= 1).all()
-        assert box[0] < box[2] and box[1] < box[3]
+        assert isinstance(box, tv_tensors.BoundingBoxes)  # format torchvision, comme Pets
+        assert box.shape == (1, 4) and box.dtype == torch.float32
+        assert tuple(box.canvas_size) == (img.height, img.width)
+        x0, y0, x1, y1 = box[0].tolist()
+        assert 0 <= x0 < x1 <= img.width and 0 <= y0 < y1 <= img.height
         assert target["label"] == i % 2
 
 

@@ -105,11 +105,14 @@ def confirm_pushed(ask: Callable[[str], str] = input) -> bool:
         "personne d'autre ne pourra retrouver son code. Sans `git push`, la tracabilite du run "
         "est cassee."
     )
-    if not sys.stdin.isatty():
-        print(f"ATTENTION : {warning}", file=sys.stderr)
-        return True
-    answer = ask(f"{warning}\nPousser d'abord (git push). Continuer quand meme ? [y/n] ")
-    return answer.strip().lower() in ("y", "yes")
+    if sys.stdin.isatty():
+        try:
+            answer = ask(f"{warning}\nPousser d'abord (git push). Continuer quand meme ? [y/n] ")
+            return answer.strip().lower() in ("y", "yes")
+        except EOFError:
+            pass  # Windows : NUL (stdin=DEVNULL) passe pour un terminal, mais rien n'y repond
+    print(f"ATTENTION : {warning}", file=sys.stderr)
+    return True
 
 
 def _sha256_text(path: Path) -> str:
@@ -146,18 +149,22 @@ def check_launch(cfg: DictConfig, git: dict[str, Any]) -> None:
         )
 
 
-def lightning_settings(device: str, precision: str) -> dict[str, str]:
-    """device (env) et precision (methode) de la config -> arguments du Trainer."""
-    if precision not in PRECISIONS:
-        raise ValueError(f"precision : fp32, fp16 ou bf16, recu {precision!r}")
-    accelerator = ACCELERATORS[resolve_device(device)]
-    if accelerator == "cpu" and precision == "fp16":
-        raise ValueError("fp16 n'est pas disponible sur CPU : precision=fp32 (ou bf16)")
-    if accelerator == "gpu" and precision == "bf16":
-        problem = bf16_problem()
-        if problem is not None:
-            raise RuntimeError(f"precision=bf16 : {problem}. precision=fp16, ou un autre GPU")
-    return {"accelerator": accelerator, "precision": PRECISIONS[precision]}
+@cache
+def cuda_problem() -> str | None:
+    """None si torch calcule sur le GPU 0, sinon la raison : pas de GPU, pilote trop ancien
+    pour le CUDA de torch, ou carte que ses wheels ne prennent plus en charge (INSTALL.md)."""
+    import torch
+
+    if not torch.cuda.is_available():
+        return (
+            f"torch {torch.__version__} ne voit aucun GPU (pas de GPU NVIDIA, ou pilote trop "
+            f"ancien pour CUDA {torch.version.cuda})"
+        )
+    try:  # une vraie operation : une carte trop ancienne passe is_available() puis echoue ici
+        (torch.ones(1, device="cuda") + 1).item()
+    except RuntimeError as e:
+        return f"{torch.cuda.get_device_name(0)} : {e}"
+    return None
 
 
 def bf16_problem() -> str | None:
@@ -196,6 +203,35 @@ def resolve_device(device: str) -> str:
     return "cpu"
 
 
+def lightning_settings(device: str, precision: str) -> dict[str, str]:
+    """device (env) et precision (methode) de la config -> arguments du Trainer."""
+    if precision not in PRECISIONS:
+        raise ValueError(f"precision : fp32, fp16 ou bf16, recu {precision!r}")
+    accelerator = ACCELERATORS[resolve_device(device)]
+    if accelerator == "cpu" and precision == "fp16":
+        raise ValueError("fp16 n'est pas disponible sur CPU : precision=fp32 (ou bf16)")
+    if accelerator == "gpu" and precision == "bf16":
+        problem = bf16_problem()
+        if problem is not None:
+            raise RuntimeError(f"precision=bf16 : {problem}. precision=fp16, ou un autre GPU")
+    return {"accelerator": accelerator, "precision": PRECISIONS[precision]}
+
+
+def compile_problem(accelerator: str) -> str | None:
+    """None si torch.compile peut generer ses noyaux GPU, sinon la raison."""
+    if accelerator != "gpu":
+        return "run sur CPU"
+    from torch.utils._triton import has_triton
+
+    if not has_triton():
+        return "Triton absent ou GPU non pris en charge"
+    # Triton compile ses lanceurs en C au premier usage (triton-windows embarque son compilateur)
+    has_cc = os.environ.get("CC") or shutil.which("gcc") or shutil.which("clang")
+    if sys.platform != "win32" and not has_cc:
+        return "aucun compilateur C pour Triton (gcc, clang ou variable CC)"
+    return None
+
+
 def resolve_compile(mode: bool | str, accelerator: str) -> bool:
     """env.compile (auto, true, false) -> compiler le backbone ou non (`lo pretrain`).
 
@@ -218,6 +254,13 @@ def resolve_compile(mode: bool | str, accelerator: str) -> bool:
     return False
 
 
+def gpu_memory_gb() -> float:
+    """Memoire du GPU 0, en Go."""
+    import torch
+
+    return torch.cuda.get_device_properties(0).total_memory / 1e9
+
+
 def resolve_grad_checkpointing(mode: bool | str, accelerator: str) -> bool:
     """env.grad_checkpointing (auto, true, false) -> recalculer les activations du backbone au
     backward ou non (`lo pretrain`). Moins de memoire GPU, plus lent, meme resultat.
@@ -235,46 +278,6 @@ def resolve_grad_checkpointing(mode: bool | str, accelerator: str) -> bool:
     return gpu_memory_gb() < SMALL_GPU_GB
 
 
-def gpu_memory_gb() -> float:
-    """Memoire du GPU 0, en Go."""
-    import torch
-
-    return torch.cuda.get_device_properties(0).total_memory / 1e9
-
-
-def compile_problem(accelerator: str) -> str | None:
-    """None si torch.compile peut generer ses noyaux GPU, sinon la raison."""
-    if accelerator != "gpu":
-        return "run sur CPU"
-    from torch.utils._triton import has_triton
-
-    if not has_triton():
-        return "Triton absent ou GPU non pris en charge"
-    # Triton compile ses lanceurs en C au premier usage (triton-windows embarque son compilateur)
-    has_cc = os.environ.get("CC") or shutil.which("gcc") or shutil.which("clang")
-    if sys.platform != "win32" and not has_cc:
-        return "aucun compilateur C pour Triton (gcc, clang ou variable CC)"
-    return None
-
-
-@cache
-def cuda_problem() -> str | None:
-    """None si torch calcule sur le GPU 0, sinon la raison : pas de GPU, pilote trop ancien
-    pour le CUDA de torch, ou carte que ses wheels ne prennent plus en charge (INSTALL.md)."""
-    import torch
-
-    if not torch.cuda.is_available():
-        return (
-            f"torch {torch.__version__} ne voit aucun GPU (pas de GPU NVIDIA, ou pilote trop "
-            f"ancien pour CUDA {torch.version.cuda})"
-        )
-    try:  # une vraie operation : une carte trop ancienne passe is_available() puis echoue ici
-        (torch.ones(1, device="cuda") + 1).item()
-    except RuntimeError as e:
-        return f"{torch.cuda.get_device_name(0)} : {e}"
-    return None
-
-
 def quiet_libraries() -> None:
     """Messages d'information de Lightning et MLflow masques : GPU detecte, graine, resume du
     modele, creation de la base MLflow... redisent la config ou nos propres lignes. Leurs
@@ -282,6 +285,12 @@ def quiet_libraries() -> None:
     quiet_mlflow_env()  # si mlflow est importe apres
     for name in ("lightning.pytorch", "lightning.fabric", "mlflow"):
         logging.getLogger(name).setLevel(logging.WARNING)
+
+
+def write_config(cfg: DictConfig, run_dir: Path) -> None:
+    """config.yaml : config complete resolue. A reecrire si le run complete sa config apres
+    prepare() (valeur resolue sur le noeud, ex. grad_checkpointing=auto)."""
+    (run_dir / "config.yaml").write_text(OmegaConf.to_yaml(cfg, resolve=True), encoding="utf-8")
 
 
 def prepare(cfg: DictConfig, run_dir: Path) -> dict[str, Any]:
@@ -300,12 +309,6 @@ def prepare(cfg: DictConfig, run_dir: Path) -> dict[str, Any]:
     )
     log.info("run dir %s | commit %s%s", run_dir, git["commit"], " (dirty)" if git["dirty"] else "")
     return git
-
-
-def write_config(cfg: DictConfig, run_dir: Path) -> None:
-    """config.yaml : config complete resolue. A reecrire si le run complete sa config apres
-    prepare() (valeur resolue sur le noeud, ex. grad_checkpointing=auto)."""
-    (run_dir / "config.yaml").write_text(OmegaConf.to_yaml(cfg, resolve=True), encoding="utf-8")
 
 
 def resume_checkpoint(resume: str | None) -> Path | None:

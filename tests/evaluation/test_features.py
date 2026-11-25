@@ -1,5 +1,5 @@
 """Cache de features : identique au calcul a la volee, relu sans recalcul, jamais
-partage entre backbones ou precisions, augmentation par retournement preservee."""
+partage entre backbones, precisions ou traitements d'image, augmentation preservee."""
 
 import random
 
@@ -15,23 +15,11 @@ from latentopt.models.contract import weights_hash
 CPU = torch.device("cpu")
 
 
-def test_variants_without_flip_is_identity():
-    t = T.ClsCenterCrop(32)
-    assert Fe.variants(t) == {"": t}
-
-
-def test_variants_with_flip_gives_two_deterministic_copies():
-    t = T.DetTransform(32, hflip=0.5)
-    v = Fe.variants(t)
-    assert set(v) == {"", "flip"}
-    assert v[""].hflip == 0.0 and v["flip"].hflip == 1.0
-    assert t.hflip == 0.5  # l'original n'est pas modifie
-
-
-def test_cache_path_encodes_split_variant_precision_and_keys(tmp_path):
-    p = Fe.cache_path(tmp_path, "pets_seg", "train", "flip", "fp16", ["block3", "block6"])
-    assert p == tmp_path / "pets_seg" / "train_flip__fp16__block3+block6.pt"
-    assert Fe.cache_path(tmp_path, "t", "val", "", "fp32", ["embed"]).name == "val__fp32__embed.pt"
+def test_cache_path_encodes_split_version_fingerprint_precision_and_keys(tmp_path):
+    p = Fe.cache_path(tmp_path, "pets_seg", "train", "flip", "abc", "fp16", ["block3", "block6"])
+    assert p == tmp_path / "pets_seg" / "train_flip__abc__fp16__block3+block6.pt"
+    name = Fe.cache_path(tmp_path, "t", "val", "", "abc", "fp32", ["embed"]).name
+    assert name == "val__abc__fp32__embed.pt"
 
 
 def test_backbone_dir_is_created_once_and_reused(isolated_data):
@@ -91,12 +79,19 @@ def small_task(monkeypatch):
 
 
 def call(backbone, task, split="train", transform=None, precision="fp32", keys=("c8",)):
-    return Fe.load_or_extract(backbone, weights_hash(backbone), task, split,
-                              transform or task.train_transform, list(keys), 8, 0, CPU,
-                              precision)  # fmt: skip
+    store = Fe.FeatureStore(backbone, CPU, precision, batch_size=8)
+    return store.entries(task, split, transform or task.train_pipeline, list(keys))
 
 
-def test_load_or_extract_extracts_once_then_reads(pyramid, small_task, monkeypatch):
+def test_feature_store_dataset_wraps_the_entries(pyramid, small_task):
+    store = Fe.FeatureStore(pyramid, CPU, batch_size=8)
+    assert store.sha == weights_hash(pyramid) and store.dir.name.endswith(store.sha[:16])
+    ds = store.dataset(small_task, "val", small_task.eval_pipeline, ["c8"])
+    assert isinstance(ds, Fe.CachedFeatures) and len(ds) == 12
+    assert "fp32" in repr(store)
+
+
+def test_entries_are_extracted_once_then_read(pyramid, small_task, monkeypatch):
     calls = []
     real = Fe.extract
     monkeypatch.setattr(Fe, "extract", lambda *a, **k: calls.append(1) or real(*a, **k))
@@ -119,36 +114,53 @@ def test_flip_variant_holds_features_of_flipped_images(pyramid, small_task):
 
 
 def test_cache_is_separated_by_backbone_and_precision(pyramid, small_task):
-    call(pyramid, small_task, split="val", transform=small_task.eval_transform)
-    call(pyramid, small_task, split="val", transform=small_task.eval_transform, precision="bf16")
+    call(pyramid, small_task, split="val", transform=small_task.eval_pipeline)
+    call(pyramid, small_task, split="val", transform=small_task.eval_pipeline, precision="bf16")
     other = type(pyramid)()
-    call(other, small_task, split="val", transform=small_task.eval_transform)
+    call(other, small_task, split="val", transform=small_task.eval_pipeline)
     dirs = sorted(p.name for p in features_root().iterdir())
     assert len(dirs) == 2  # un dossier par backbone
+    fp = small_task.eval_pipeline.fingerprint()
     files = sorted(p.name for p in features_root().glob("*/synthetic_det/*.pt"))
-    assert files == ["val__bf16__c8.pt", "val__fp32__c8.pt", "val__fp32__c8.pt"]
+    assert files == [
+        f"val__{fp}__bf16__c8.pt",
+        f"val__{fp}__fp32__c8.pt",
+        f"val__{fp}__fp32__c8.pt",
+    ]
+
+
+def test_changing_the_image_pipeline_never_reuses_old_features(pyramid, small_task, monkeypatch):
+    """Un autre traitement des images (ici une autre taille) a une autre empreinte : ses
+    features sont extraites a part, jamais relues depuis celles de l'ancien."""
+    calls = []
+    real = Fe.extract
+    monkeypatch.setattr(Fe, "extract", lambda *a, **k: calls.append(1) or real(*a, **k))
+    call(pyramid, small_task, split="val", transform=small_task.eval_pipeline)
+    other = T.Pipeline(T.square(32))
+    assert other.fingerprint() != small_task.eval_pipeline.fingerprint()
+    call(pyramid, small_task, split="val", transform=other)
+    assert len(calls) == 2
+    assert len(list(features_root().glob("*/synthetic_det/val__*.pt"))) == 2
 
 
 def test_incoherent_cache_is_refused(pyramid, small_task):
-    call(pyramid, small_task, split="val", transform=small_task.eval_transform)
-    path = next(features_root().glob("*/synthetic_det/val__fp32__c8.pt"))
+    call(pyramid, small_task, split="val", transform=small_task.eval_pipeline)
+    path = next(features_root().glob("*/synthetic_det/val__*__fp32__c8.pt"))
     entry = torch.load(path, weights_only=False)
     entry["backbone_sha256"] = "0" * 64
     torch.save(entry, path)
     with pytest.raises(ValueError, match="incoherent"):
-        call(pyramid, small_task, split="val", transform=small_task.eval_transform)
+        call(pyramid, small_task, split="val", transform=small_task.eval_pipeline)
 
 
-def test_cached_features_flip_probability(pyramid, small_task):
+def test_cached_features_draw_one_version_uniformly(pyramid, small_task):
     entries = call(pyramid, small_task)
+    single = Fe.CachedFeatures(entries[:1])
+    assert len(single) == 12
+    assert torch.equal(single[3][0]["c8"], entries[0]["feats"]["c8"][3])  # aucun tirage
     random.seed(0)
-    never = Fe.CachedFeatures(entries, hflip=0.0)
-    always = Fe.CachedFeatures(entries, hflip=1.0)
-    assert len(never) == 12
-    assert torch.equal(never[3][0]["c8"], entries[0]["feats"]["c8"][3])
-    assert torch.equal(always[3][0]["c8"], entries[1]["feats"]["c8"][3])
-    half = Fe.CachedFeatures(entries, hflip=0.5)
-    flips = sum(torch.equal(half[0][0]["c8"], entries[1]["feats"]["c8"][0]) for _ in range(400))
+    both = Fe.CachedFeatures(entries)
+    flips = sum(torch.equal(both[0][0]["c8"], entries[1]["feats"]["c8"][0]) for _ in range(400))
     assert 140 < flips < 260
 
 

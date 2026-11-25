@@ -66,7 +66,7 @@ class Imagenette(DownloadableDataset):
             parts = splits.holdout(n)
             parts["test"] = list(range(n, n + len(test)))  # ids du test a la suite du train
             meta = {"pool": "train", "test": "val officiel", "seed": 0, "frac": 0.05}
-            return parts, train.ids() + test.ids(), meta
+            return splits.Computed(indices=parts, ids=train.ids() + test.ids(), meta=meta)
 
         return [splits.freeze(self.NAME, compute, force)]
 

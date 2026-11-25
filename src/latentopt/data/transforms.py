@@ -1,111 +1,161 @@
-"""Transforms des taches aval (evaluation et entrainement des tetes), appliques
-conjointement a (image, cible) pour garder les deux alignees : un flip retourne aussi le
-masque ou la boite. Les vues du pre-entrainement sont ailleurs (methods/lejepa.py).
+"""Traitement des images des taches aval (evaluation et entrainement des tetes).
 
-Nommes par tache puis variante (`Cls...`, `Seg...`, `Det...`), comme les cles de
-`DatasetSpec.tasks()`. Les transforms d'eval font partie du protocole : les modifier change
-les scores et casse la comparabilite avec les scores existants. A l'entrainement, la seule
-augmentation est `hflip`, la probabilite de retournement horizontal (0.5 pour la baseline).
+Un `Pipeline` applique a (image, cible), dans cet ordre :
+    augment   aleatoire, entrainement seulement (ex. `hflip()`) ; None a l'evaluation
+    prepare   deterministe, toujours : taille et conversion (`center_crop`, `square`)
+puis convertit la cible au format du modele. Les etapes sont des transforms torchvision v2 :
+la cible (masque `tv_tensors.Mask`, boites `tv_tensors.BoundingBoxes`) suit l'image toute
+seule, quelles que soient les augmentations combinees.
 
-Les images sortent en float32 dans [0, 1], sans normalisation : c'est le backbone qui
-normalise (voir models/contract.py).
+`prepare` fait partie du protocole : la modifier change les scores. Le cache de features
+calcule toutes les versions d'une augmentation `Enumerate` (voir `Pipeline.variants`), et
+l'empreinte d'un pipeline (`fingerprint`) entre dans sa cle.
+
+Les images sortent en float32 dans [0, 1] : c'est le backbone qui normalise
+(models/contract.py). Les vues du pre-entrainement sont ailleurs (methods/lejepa.py).
 """
 
-import random
-from typing import Any, Protocol, TypeVar
+import hashlib
+from dataclasses import dataclass, replace
+from typing import Any
 
-import numpy as np
 import torch
 from PIL import Image
 from torch import Tensor
+from torchvision import tv_tensors
+from torchvision.transforms import v2
 from torchvision.transforms.v2 import functional as TF
 
-Target = TypeVar("Target", contravariant=True)
+
+class Resize(v2.Resize):
+    """`v2.Resize`, sauf pour les masques : plus proche voisin "exact", celui de PIL. Le plus
+    proche voisin par defaut de torchvision choisit d'autres pixels (une centaine de pixels
+    de classe differents sur un masque 128x128)."""
+
+    def transform(self, inpt: Any, params: dict[str, Any]) -> Any:
+        if isinstance(inpt, tv_tensors.Mask):
+            return TF.resize(inpt, self.size, interpolation=TF.InterpolationMode.NEAREST_EXACT)
+        return super().transform(inpt, params)
+
+    def extra_repr(self) -> str:
+        return f"{super().extra_repr()}, masks=nearest_exact"
 
 
-class JointTransform(Protocol[Target]):
-    """(image PIL, cible brute de la source) -> (image (3, size, size) float32 [0, 1], cible)."""
+class ToFloatImage(v2.Transform):
+    """Image -> (3, H, W) float32 dans [0, 1] ; la cible n'est pas touchee. Remplace
+    `ToImage` + `ToDtype`, dont le repr tait le type : il est ici dans le repr, donc dans
+    l'empreinte du pipeline."""
 
-    def __call__(self, img: Image.Image, target: Target) -> tuple[Tensor, Any]: ...
+    def transform(self, inpt: Any, params: dict[str, Any]) -> Any:
+        if isinstance(inpt, (Image.Image, tv_tensors.Image)):
+            return TF.to_dtype(TF.to_image(inpt), torch.float32, scale=True)
+        return inpt
 
-
-def to_tensor(img: Image.Image) -> Tensor:
-    """PIL -> (3, H, W) float32 dans [0, 1]. Pas de normalisation : c'est le backbone qui s'en
-    charge (models/contract.py)."""
-    return TF.to_dtype(TF.to_image(img), torch.float32, scale=True)
-
-
-def check_hflip(hflip: float) -> float:
-    """`hflip` est une probabilite : True vaudrait 1 (toujours retourner), pas 0.5."""
-    if isinstance(hflip, bool) or not 0.0 <= hflip <= 1.0:
-        raise ValueError(
-            f"hflip est une probabilite dans [0, 1] (0.5 pour la baseline), recu {hflip!r}"
-        )
-    return float(hflip)
+    def extra_repr(self) -> str:
+        return "float32, [0, 1]"
 
 
-def mask_to_tensor(mask: Image.Image) -> Tensor:
-    """Masque PIL (mode L, un indice de classe par pixel) -> (H, W) int64."""
-    return torch.from_numpy(np.array(mask, dtype=np.int64))
+def center_crop(size: int) -> v2.Compose:
+    """Petit cote a `size`, puis crop central carre (classification)."""
+    return v2.Compose([Resize(size), v2.CenterCrop(size), ToFloatImage()])
 
 
-class ClsCenterCrop:
-    """Classification : petit cote a `size`, puis crop central carre."""
-
-    def __init__(self, size: int) -> None:
-        self.size = size
-
-    def __call__(self, img: Image.Image, label: int) -> tuple[Tensor, int]:
-        return to_tensor(TF.center_crop(TF.resize(img, self.size), self.size)), label
+def square(size: int) -> v2.Compose:
+    """Resize anisotrope en carre, sans crop : rien n'est coupe (objets centres, masques,
+    boites). L'IoU entre boites alignees est invariante par ce scaling des axes."""
+    return v2.Compose([Resize([size, size]), ToFloatImage()])
 
 
-class ClsSquareResize:
-    """Classification d'objets centres (Galaxy10) : resize anisotrope, sans crop."""
+def steps(t: v2.Transform | None) -> str:
+    """Etapes d'un transform sur une ligne, `Compose` aplatis : "A > B > C"."""
+    if t is None:
+        return "aucune"
+    if isinstance(t, v2.Compose):
+        return " > ".join(steps(c) for c in t.transforms)
+    return repr(t)
 
-    def __init__(self, size: int) -> None:
-        self.size = size
 
-    def __call__(self, img: Image.Image, label: int) -> tuple[Tensor, int]:
-        return to_tensor(TF.resize(img, [self.size, self.size])), label
+class Enumerate(v2.Transform):
+    """Une augmentation a nombre fini de versions (nom -> transform deterministe) : une
+    version tiree au hasard par appel, et le cache de features les calcule toutes."""
+
+    def __init__(self, choices: dict[str, v2.Transform]) -> None:
+        super().__init__()
+        self.choices = choices
+
+    def extra_repr(self) -> str:
+        # les versions sont dans le repr, donc dans l'empreinte du pipeline
+        return ", ".join(f"{name!r}: {t!r}" for name, t in self.choices.items())
+
+    def forward(self, *inputs: Any) -> Any:
+        names = list(self.choices)
+        name = names[int(torch.randint(len(names), ()))]
+        return self.choices[name](*inputs)
 
 
-class SegTransform:
-    """Image en carre `size` (scaling anisotrope reversible).
+def hflip() -> Enumerate:
+    """Retournement horizontal une fois sur deux : versions "" (inchangee) et "flip"."""
+    return Enumerate({"": v2.Identity(), "flip": v2.RandomHorizontalFlip(p=1.0)})
 
-    Eval (`native_mask=True`) : le masque garde sa resolution native ; la metrique y
-    remonte les logits, donc la perte de resolution de la tete est penalisee.
-    Train : le masque suit l'image (nearest), ce qui permet le collate par defaut.
-    """
 
-    def __init__(self, size: int, native_mask: bool = True, hflip: float = 0.0) -> None:
-        self.size, self.native_mask, self.hflip = size, native_mask, check_hflip(hflip)
-
-    def __call__(self, img: Image.Image, mask: Image.Image) -> tuple[Tensor, Tensor]:
-        img = TF.resize(img, [self.size, self.size])
-        if not self.native_mask:
-            mask = TF.resize(
-                mask, [self.size, self.size], interpolation=TF.InterpolationMode.NEAREST
+def to_model_target(target: Any, size: tuple[int, int]) -> Any:
+    """Cible torchvision -> format du modele : label int inchange ; masque -> (H, W) int64 ;
+    {"box": BoundingBoxes (1, 4) en pixels, "label"} -> {"box": (4,) xyxy dans [0, 1],
+    "label": tenseur int64}. `size` : (H, W) de l'image au moment de la conversion."""
+    if isinstance(target, tv_tensors.Mask):
+        return target.as_subclass(Tensor).to(torch.int64)
+    if isinstance(target, dict):
+        if not target["box"].is_floating_point():
+            raise TypeError(
+                "boites entieres : torchvision les arrondit au pixel a chaque transform, "
+                "les creer en float32 dans la source"
             )
-        if self.hflip and random.random() < self.hflip:
-            img, mask = TF.hflip(img), TF.hflip(mask)
-        return to_tensor(img), mask_to_tensor(mask)
+        h, w = size
+        box = target["box"].as_subclass(Tensor)[0] / torch.tensor([w, h, w, h])
+        return {"box": box.clamp(0, 1), "label": torch.tensor(target["label"])}
+    return target
 
 
-class DetTransform:
-    """Image en carre `size`. Les boites sont normalisees dans [0, 1] et l'IoU entre
-    boites alignees est invariante par scaling des axes : aucune correction a faire."""
+@dataclass(frozen=True)
+class Pipeline:
+    """(image PIL, cible torchvision) -> (image (3, size, size) float32 [0, 1], cible du
+    modele). `native_target` : la cible garde sa resolution d'origine (evaluation de la
+    segmentation : la metrique y remonte les logits, la perte de resolution de la tete est
+    donc penalisee)."""
 
-    def __init__(self, size: int, hflip: float = 0.0) -> None:
-        self.size, self.hflip = size, check_hflip(hflip)
+    prepare: v2.Transform
+    augment: v2.Transform | None = None
+    native_target: bool = False
 
-    def __call__(
-        self, img: Image.Image, target: dict[str, Any]
-    ) -> tuple[Tensor, dict[str, Tensor]]:
-        img = to_tensor(TF.resize(img, [self.size, self.size]))
-        box = target["box"].clone()
-        if self.hflip and random.random() < self.hflip:
-            img, box = TF.hflip(img), torch.stack([1 - box[2], box[1], 1 - box[0], box[3]])
-        return img, {"box": box, "label": torch.tensor(target["label"])}
+    def __call__(self, img: Image.Image, target: Any) -> tuple[Tensor, Any]:
+        if self.augment is not None:
+            img, target = self.augment(img, target)
+        if self.native_target:
+            img = self.prepare(img)
+        else:
+            img, target = self.prepare(img, target)
+        return img, to_model_target(target, tuple(img.shape[-2:]))
+
+    def variants(self) -> dict[str, "Pipeline"]:
+        """Versions deterministes a extraire dans le cache : une par choix d'une
+        augmentation `Enumerate`, une seule sans augmentation."""
+        if self.augment is None:
+            return {"": self}
+        if not isinstance(self.augment, Enumerate):
+            raise NotImplementedError(
+                f"augmentation non enumerable ({type(self.augment).__name__}) : le cache de "
+                "features ne sait calculer que les versions d'un `Enumerate`"
+            )
+        return {name: replace(self, augment=t) for name, t in self.augment.choices.items()}
+
+    def __repr__(self) -> str:
+        native = ", cible a sa resolution d'origine" if self.native_target else ""
+        return f"Pipeline(augment: {steps(self.augment)} | prepare: {steps(self.prepare)}{native})"
+
+    def fingerprint(self) -> str:
+        """Empreinte du repr (chaque etape et ses parametres) : change des que le traitement
+        change, donc des que les features ou les scores peuvent changer."""
+        return hashlib.sha256(repr(self).encode()).hexdigest()[:12]
 
 
 def collate_native(batch: list[tuple[Tensor, Tensor]]) -> tuple[Tensor, list[Tensor]]:

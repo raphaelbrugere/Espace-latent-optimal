@@ -30,7 +30,7 @@ def test_task_is_consistent(name):
     assert (PROJECT_ROOT / "configs" / "head" / f"{t.default_head}.yaml").exists()
     assert t.epochs > 0 and t.num_classes > 1
     # les transforms d'eval sont deterministes
-    assert getattr(t.eval_transform, "hflip", 0.0) == 0.0
+    assert getattr(t.eval_pipeline, "hflip", 0.0) == 0.0
     # Task est fige : le protocole ne se modifie pas a l'execution
     with pytest.raises(AttributeError):
         t.epochs = 1
@@ -45,7 +45,7 @@ def test_synthetic_tasks_mirror_the_real_protocol(real, synthetic):
     r, s = tasks.get_task(real), tasks.get_task(synthetic)
     for field in ("primary_metric", "loss", "default_neck", "default_head"):
         assert getattr(r, field) == getattr(s, field), field
-    assert type(r.eval_transform) is type(s.eval_transform)
+    assert type(r.eval_pipeline) is type(s.eval_pipeline)
     assert (r.collate_fn is None) == (s.collate_fn is None)
 
 

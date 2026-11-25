@@ -65,10 +65,14 @@ def splits_dir(tmp_path, monkeypatch):
     return tmp_path / "splits"
 
 
-def test_save_load_indices_roundtrip(splits_dir):
+def freeze_toy(ids, parts, **meta):
+    return splits.freeze("toy", lambda: splits.Computed(indices=parts, ids=ids, meta=meta))
+
+
+def test_freeze_load_indices_roundtrip(splits_dir):
     ids = [f"img_{i:03d}.jpg" for i in range(40)]
     s = splits.holdout(len(ids), frac=0.25)
-    path = splits.save("toy", s, ids, seed=0, frac=0.25)
+    path = freeze_toy(ids, s, seed=0, frac=0.25)
     assert path == splits_dir / "toy.json"
 
     payload = splits.load("toy")
@@ -85,7 +89,7 @@ def test_save_load_indices_roundtrip(splits_dir):
 
 def test_indices_missing_ids_raise(splits_dir):
     ids = [str(i) for i in range(10)]
-    splits.save("toy", splits.holdout(10), ids)
+    freeze_toy(ids, splits.holdout(10))
     with pytest.raises(KeyError, match="introuvables"):
         splits.indices("toy", "train", ids[:3])
 
@@ -97,7 +101,7 @@ def test_freeze_keeps_an_existing_file_unless_forced(splits_dir):
         def inner():
             calls.append(seed)
             ids = [str(i) for i in range(20)]
-            return splits.holdout(20, seed=seed), ids, {"seed": seed}
+            return splits.Computed(splits.holdout(20, seed=seed), ids, {"seed": seed})
 
         return inner
 

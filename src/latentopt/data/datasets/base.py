@@ -16,6 +16,7 @@ from typing import Any, ClassVar, Protocol, TypeVar
 
 from PIL import Image
 from torch.utils.data import Dataset
+from torchvision import tv_tensors
 
 T = TypeVar("T", covariant=True)
 
@@ -38,9 +39,10 @@ class Source(Protocol[T]):
         return f"{type(self).__name__}({where}{len(self)} images)"
 
 
+# Cibles au format torchvision : elles suivent l'image dans les transforms v2 (data/transforms.py).
 ClsSource = Source[int]  # label de classe
-SegSource = Source[Image.Image]  # masque "L" de la taille de l'image, valeurs = classes
-DetSource = Source[dict[str, Any]]  # {"box": tenseur xyxy normalise dans [0, 1], "label": int}
+SegSource = Source[tv_tensors.Mask]  # (H, W) de la taille de l'image, valeurs = classes
+DetSource = Source[dict[str, Any]]  # {"box": BoundingBoxes (1, 4) xyxy en pixels, "label": int}
 
 
 class DatasetSpec(ABC):

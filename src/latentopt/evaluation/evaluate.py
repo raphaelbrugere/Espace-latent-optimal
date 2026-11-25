@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader
 
 from latentopt import hub
 from latentopt.data.datasets.base import abbrev
-from latentopt.evaluation.features import AUTOCAST, CachedFeatures, collate, load_or_extract
+from latentopt.evaluation.features import AUTOCAST, FeatureStore, collate
 from latentopt.evaluation.tasks import Task, get_task, to_device, to_float
 from latentopt.models import recipe
 from latentopt.models.backbones.checkpoint import resolve_run
@@ -109,6 +109,26 @@ def load_trained(
     return model, ckpt, issues
 
 
+def pipeline_issues(head_dir: Path, task: Task) -> list[str]:
+    """Traitement des images de l'entrainement different de celui du code actuel : la tete a
+    ete apprise avec un autre protocole, ses scores ne sont pas comparables."""
+    path = head_dir / "results.json"
+    trained = (
+        json.loads(path.read_text(encoding="utf-8")).get("pipelines") if path.exists() else None
+    )
+    if trained is None:
+        return []  # entrainement anterieur a l'enregistrement des empreintes
+    current = {
+        "train": task.train_pipeline.fingerprint(),
+        "eval": task.eval_pipeline.fingerprint(),
+    }
+    return [
+        f"pipeline {kind} : entraine avec {trained[kind]}, code actuel {current[kind]}"
+        for kind in current
+        if trained.get(kind) != current[kind]
+    ]
+
+
 def evaluate_downstream(
     trained: list[str | Path],
     split: str,
@@ -138,14 +158,14 @@ def evaluate_downstream(
         model, ckpt, issues = load_trained(head_dir, cfg, backbone)
         if n_params > BACKBONE_MAX_PARAMS:
             issues.append(f"backbone : {n_params:,} parametres > {BACKBONE_MAX_PARAMS:,}")
+        issues += pipeline_issues(head_dir, task)
 
         if cache_features:
-            feats_info = {"backbone": OmegaConf.to_container(cfg.backbone, resolve=True)}
-            entries = load_or_extract(backbone, sha, task, split, task.eval_transform,
-                                      model.in_keys, 256, num_workers, device, precision,
-                                      feats_info)  # fmt: skip
+            info = {"backbone": OmegaConf.to_container(cfg.backbone, resolve=True)}
+            store = FeatureStore(backbone, device, precision, num_workers, info=info)
+            dataset = store.dataset(task, split, task.eval_pipeline, model.in_keys)
             native = task.collate_fn is not None
-            loader = DataLoader(CachedFeatures(entries), batch_size=batch_size,
+            loader = DataLoader(dataset, batch_size=batch_size,
                                 collate_fn=collate(native_targets=native))  # fmt: skip
         else:
             loader = DataLoader(task.dataset(split), batch_size=batch_size,
@@ -164,6 +184,7 @@ def evaluate_downstream(
             },  # fmt: skip
             "backbone": {"sha256": sha, **info},
             "seed": ckpt.get("seed"),
+            "pipeline": task.eval_pipeline.fingerprint(),
             "violations": issues,
         }
         flag = "" if not issues else "   VIOLATION : " + "; ".join(issues)

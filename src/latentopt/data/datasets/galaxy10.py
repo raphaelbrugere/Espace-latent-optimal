@@ -56,7 +56,7 @@ class Galaxy10Pool(ClsSource):
     """Split train fige seul (80 %) -> (image PIL RGB, label) : val et test n'y entrent pas."""
 
     def __init__(self, root: Path | None = None) -> None:
-        DATASET.freeze_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
+        DATASET.check_splits(root)
         self.source, self.split = Galaxy10Source(root), "train"
         self.rows = splits.indices(Galaxy10.NAME, "train", self.source.ids())
 
@@ -103,19 +103,29 @@ class Galaxy10(DownloadableDataset):
         def compute() -> splits.Computed:
             source = Galaxy10Source(root)
             meta = {"repo": REPO, "revision": REVISION, "seed": 0}
-            return splits.stratified(source.labels()), source.ids(), meta
+            indices = splits.stratified(source.labels())
+            return splits.Computed(indices=indices, ids=source.ids(), meta=meta)
 
         return [splits.freeze(self.NAME, compute, force)]
+
+    def check_splits(self, root: Path | None = None) -> None:
+        """Fige les splits s'il le faut, puis verifie qu'ils viennent de la revision du code.
+        Sinon leurs numeros de ligne designent d'autres images : val ou test pourraient
+        entrer dans l'entrainement sans que rien ne le signale. Appelee avant toute lecture,
+        par la tache comme par le pool de pre-entrainement."""
+        self.freeze_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
+        frozen = splits.load(self.NAME).get("revision")
+        if frozen != REVISION:
+            raise ValueError(
+                f"{self.NAME} : splits figes sur la revision {frozen}, code sur {REVISION} ; "
+                f"lancer `lo data prepare {self.NAME} --force-download --force-splits`"
+            )
 
     def tasks(self) -> dict[str, Callable]:
         return {"cls": self.build}
 
     def build(self, split: str, transform: Callable, root: Path | None = None) -> Subset:
-        self.freeze_splits(root)  # cree le JSON s'il manque, sinon ne fait rien
-        frozen = splits.load(self.NAME)
-        if frozen.get("revision") != REVISION:
-            got = frozen.get("revision")
-            raise ValueError(f"{self.NAME} : splits figes sur {got}, code sur {REVISION}")
+        self.check_splits(root)
         source = Galaxy10Source(root)
         return Subset(source, splits.indices(self.NAME, split, source.ids()), transform)
 

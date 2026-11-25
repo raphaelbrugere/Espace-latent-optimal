@@ -75,8 +75,21 @@ chiffres, et figé par `tests/data/test_abbreviations.py`. Un nouveau dataset de
 | `pets_seg` | 128px carré ; masque à la résolution native | 3 (animal, fond, contour) | mIoU à la résolution native |
 | `pets_det` | 128px carré ; boîte normalisée dans [0, 1] | 2 (chat, chien) | localisation : classe juste et IoU ≥ seuil, moyenné sur IoU 0.5 à 0.95 |
 
-Les transforms d'évaluation font partie du protocole : les modifier rend les scores incomparables.
-Elles renvoient des images dans [0, 1] : la normalisation est faite par le backbone (contrat dans `models/contract.py`).
+Chaque tâche déclare dans `evaluation/tasks.py` le traitement de ses images, en deux parties
+(détail dans `data/transforms.py`) :
+
+- **`prepare`** (la colonne « Entrée ») : taille et conversion, appliquée à l'évaluation comme à l'entraînement.
+  Elle fait partie du protocole : la modifier rend les scores incomparables.
+- **`augment`** : l'augmentation à l'entraînement des têtes, jamais à l'évaluation. Aujourd'hui, un
+  retournement horizontal une fois sur deux pour `pets_seg` et `pets_det`, aucune pour la classification. Les
+  augmentations sont celles de torchvision : on peut les combiner, la cible (masque, boîte) suit l'image.
+
+Le cache de features calcule chaque version d'une augmentation (image normale et retournée), puis en tire une
+au hasard à chaque passage. Une empreinte du traitement est enregistrée avec les features et dans les résultats
+de `lo train` : modifier le traitement ne réutilise jamais d'anciennes features, et `lo eval` signale une tête
+entraînée avec un autre traitement que le code actuel.
+
+Les images sortent dans [0, 1] : la normalisation est faite par le backbone (contrat dans `models/contract.py`).
 
 ## Respect de la règle
 
@@ -124,8 +137,8 @@ faisait avant cet ordre. Un identifiant manquant au chargement lève une erreur.
 
 Galaxy10 demande une attention particulière : ses identifiants sont des numéros de ligne, valables pour la seule
 révision HF épinglée (`REVISION` dans `galaxy10.py`). Le JSON enregistre cette révision, et la tâche
-`galaxy10_cls` vérifie qu'elle est celle du code ; le pool de pré-entraînement (`data=galaxy10`) ne fait pas cette
-vérification. De plus, les données sur disque ne gardent pas trace de la leur : changer `REVISION` sans
+`galaxy10_cls` comme le pool de pré-entraînement (`data=galaxy10`) vérifient qu'elle est celle du code avant toute
+lecture. En revanche, les données sur disque ne gardent pas trace de la leur : changer `REVISION` sans
 re-télécharger passerait inaperçu, et les numéros de ligne désigneraient d'autres images. Changer `REVISION` impose
 donc `lo data prepare galaxy10 --force-download --force-splits`, et rend les scores incomparables aux anciens.
 

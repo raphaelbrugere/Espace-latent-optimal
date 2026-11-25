@@ -6,10 +6,12 @@ resolution native et la normalisation des boites.
 """
 
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import torch
 from PIL import Image, ImageDraw
+from torchvision import tv_tensors
 
 from latentopt.data.datasets.base import ClsSource, DatasetSpec, DetSource, SegSource, Subset
 
@@ -62,7 +64,7 @@ class BlobsSource(SegSource):
     def ids(self) -> list[str]:
         return [str(i) for i in range(self.n)]  # pas de split fige : la graine fait le split
 
-    def __getitem__(self, i: int) -> tuple[Image.Image, Image.Image]:
+    def __getitem__(self, i: int) -> tuple[Image.Image, tv_tensors.Mask]:
         rng = np.random.RandomState(self.seed * 1_000_003 + i)  # cf. ShapesSource
         w0, h0 = self.size
         img, mask = noise(rng, w0, h0), Image.new("L", (w0, h0), 0)
@@ -72,7 +74,7 @@ class BlobsSource(SegSource):
             w, h = rng.randint(12, w0 // 2), rng.randint(12, h0 // 2)
             ImageDraw.Draw(img).ellipse([x, y, x + w, y + h], fill=self.palette[c])
             ImageDraw.Draw(mask).ellipse([x, y, x + w, y + h], fill=c)
-        return img, mask
+        return img, tv_tensors.Mask(torch.from_numpy(np.array(mask)))
 
 
 class HeadsSource(DetSource):
@@ -89,7 +91,7 @@ class HeadsSource(DetSource):
     def ids(self) -> list[str]:
         return [str(i) for i in range(self.n)]  # pas de split fige : la graine fait le split
 
-    def __getitem__(self, i: int) -> tuple[Image.Image, dict[str, torch.Tensor | int]]:
+    def __getitem__(self, i: int) -> tuple[Image.Image, dict[str, Any]]:
         rng = np.random.RandomState(self.seed * 1_000_003 + i)  # cf. ShapesSource
         w0, h0 = self.size
         img, label = noise(rng, w0, h0), i % 2
@@ -97,9 +99,9 @@ class HeadsSource(DetSource):
         x, y = rng.randint(0, w0 - w), rng.randint(0, h0 - h)
         color = np.clip(np.array(self.palette[label]) + rng.randn(3) * 20, 0, 255)
         ImageDraw.Draw(img).ellipse([x, y, x + w, y + h], fill=tuple(int(c) for c in color))
-        box = torch.tensor([x / w0, y / h0, (x + w) / w0, (y + h) / h0])
-        # box en coordonnees normalisees [0, 1] (x0, y0, x1, y1).
-        return img, {"box": box, "label": label}
+        box = torch.tensor([[x, y, x + w, y + h]], dtype=torch.float32)
+        boxes = tv_tensors.BoundingBoxes(box, format="XYXY", canvas_size=(h0, w0))
+        return img, {"box": boxes, "label": label}
 
 
 class Synthetic(DatasetSpec):

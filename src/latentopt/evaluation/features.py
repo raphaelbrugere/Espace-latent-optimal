@@ -3,7 +3,7 @@ recalculer le backbone a chaque epoch.
 
     data/features/<date de creation>_<sha backbone[:16]>/
     |-- info.json                                    backbone (config, origine), date
-    `-- <tache>/<split>[_flip]__<precision>__<cles>.pt
+    `-- <tache>/<split>[_<version>]__<empreinte>__<precision>__<cles>.pt
 
 - Dossier : la date (AAAA-MM-JJ_HH-MM-SS) le rend lisible et triable ; l'empreinte des
   poids permet de le retrouver (`*_<sha>`) : un backbone relit toujours ses propres
@@ -16,18 +16,19 @@ recalculer le backbone a chaque epoch.
 - Cles : seules les entrees lues par le neck (`neck.in_keys`, reprises par
   `Downstream.in_keys`) sont stockees : `embed` pese ~2 Ko par image, les 4 cartes d'un
   ViT-S/8 en 128px ~0,8 Mo (fp16).
-- Augmentation : le retournement horizontal de la baseline (seg, det) ne commute pas avec
-  le backbone. Les deux variantes (jamais / toujours retournee) sont donc extraites, et
-  `CachedFeatures` tire a pile ou face a chaque passage, avec la probabilite du transform.
-  Meme distribution d'augmentation que sans cache ; tirages differents (graine).
+- Augmentation : elle ne commute pas avec le backbone. Chaque version d'une augmentation
+  `Enumerate` (ex. inchangee / retournee) est donc extraite une fois (`Pipeline.variants`),
+  et `CachedFeatures` en tire une au hasard, uniformement, a chaque passage : meme
+  distribution d'augmentation que sans cache, tirages differents.
 - Precision : features stockees dans le dtype produit par le backbone (autocast), donc
   sans perte par rapport a un calcul a la volee. Elle fait partie du nom de fichier : des
   features fp32 ne sont jamais relues pour un run fp16.
-- Les transforms d'eval et la resolution font partie du protocole et ne sont pas dans la
-  cle : les modifier impose d'incrementer FORMAT.
+- Empreinte : celle du pipeline de la version (`Pipeline.fingerprint` : preparation,
+  augmentation, resolution) est dans le nom du fichier. Modifier le traitement des images
+  ne relit donc jamais d'anciennes features : elles sont recalculees. FORMAT ne change
+  qu'avec le format du fichier lui-meme.
 """
 
-import copy
 import json
 import logging
 import os
@@ -45,20 +46,24 @@ from torch import Tensor
 from torch.utils.data import DataLoader, Dataset, default_collate
 
 from latentopt.data.paths import features_root
+from latentopt.data.transforms import Pipeline
 from latentopt.evaluation.tasks import Task
+from latentopt.models.contract import weights_hash
 
 log = logging.getLogger(__name__)
-FORMAT = 2  # 2 : precision dans le nom, dossier date
+FORMAT = 3  # 2 : precision dans le nom, dossier date ; 3 : empreinte du pipeline dans le nom
 AUTOCAST = {"fp32": None, "fp16": torch.float16, "bf16": torch.bfloat16}
 
 
-def variants(transform: Any) -> dict[str, Any]:
-    """Transform a retournement aleatoire -> ses deux variantes deterministes."""
-    if not getattr(transform, "hflip", 0):
-        return {"": transform}
-    keep, flip = copy.copy(transform), copy.copy(transform)
-    keep.hflip, flip.hflip = 0.0, 1.0
-    return {"": keep, "flip": flip}
+def _write_atomic(path: Path, write: Callable[[Path], Any]) -> None:
+    """Ecrit via un fichier temporaire du meme dossier, puis le renomme : un lecteur voit le
+    fichier complet ou rien (os.replace est atomique, y compris sur le disque reseau)."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        write(tmp)
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def backbone_dir(sha: str, info: dict | None = None) -> Path:
@@ -82,22 +87,17 @@ def backbone_dir(sha: str, info: dict | None = None) -> Path:
     return oldest
 
 
-def _write_atomic(path: Path, write: Callable[[Path], Any]) -> None:
-    """Ecrit via un fichier temporaire du meme dossier, puis le renomme : un lecteur voit le
-    fichier complet ou rien (os.replace est atomique, y compris sur le disque reseau)."""
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    try:
-        write(tmp)
-        os.replace(tmp, path)
-    finally:
-        tmp.unlink(missing_ok=True)
-
-
 def cache_path(
-    base: Path, task: str, split: str, variant: str, precision: str, keys: list[str]
+    base: Path,
+    task: str,
+    split: str,
+    variant: str,
+    fingerprint: str,
+    precision: str,
+    keys: list[str],
 ) -> Path:
-    name = f"{split}{'_' + variant if variant else ''}__{precision}__{'+'.join(keys)}.pt"
-    return base / task / name
+    head = f"{split}_{variant}" if variant else split
+    return base / task / f"{head}__{fingerprint}__{precision}__{'+'.join(keys)}.pt"
 
 
 def _images_and_targets(batch: list[tuple[Tensor, Any]]) -> tuple[Tensor, list[Any]]:
@@ -130,64 +130,97 @@ def extract(
     return {"feats": {k: torch.cat(v) for k, v in feats.items()}, "targets": targets}
 
 
-def load_or_extract(
-    backbone: nn.Module,
-    sha: str,
-    task: Task,
-    split: str,
-    transform: Any,
-    keys: list[str],
-    batch_size: int,
-    num_workers: int,
-    device: torch.device,
-    precision: str,
-    info: dict | None = None,
-) -> list[dict[str, Any]]:
-    """Une entree par variante du transform ; extraite une fois, relue ensuite.
-    `info` (config et origine du backbone) va dans info.json a la creation du dossier."""
-    base = backbone_dir(sha, info)
-    entries = []
-    for variant, t in variants(transform).items():
-        path = cache_path(base, task.name, split, variant, precision, keys)
-        if path.exists():
-            entry = torch.load(path, map_location="cpu", weights_only=False, mmap=True)
-            coherent = entry["backbone_sha256"] == sha and entry["format"] == FORMAT
-            if not coherent or entry["meta"]["precision"] != precision:
-                raise ValueError(f"{path} : cache incoherent, le supprimer pour le recalculer")
-        else:
-            label = f"{task.name}/{split}" + (f" ({variant})" if variant else "")
-            log.info("extraction des features %s -> %s", label, path)
-            dataset = task.build(split, t)
-            entry = extract(backbone, dataset, keys, batch_size, num_workers, device, precision)
-            entry["meta"] = {
-                "task": task.name,
-                "split": split,
-                "variant": variant,
-                "keys": list(keys),
-                "precision": precision,
-            }
-            entry["format"], entry["backbone_sha256"] = FORMAT, sha
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _write_atomic(path, partial(torch.save, entry))
-        entries.append(entry)
-    return entries
-
-
 class CachedFeatures(Dataset):
-    """(features d'une image, cible) depuis le cache ; variante retournee avec la
-    probabilite `hflip` du transform d'origine (aucun tirage s'il n'y a qu'une variante)."""
+    """(features d'une image, cible) depuis le cache ; une version tiree uniformement par
+    passage quand il y en a plusieurs (augmentation), aucun tirage sinon."""
 
-    def __init__(self, entries: list[dict], hflip: float = 0.0) -> None:
-        self.entries, self.hflip = entries, hflip
+    def __init__(self, entries: list[dict]) -> None:
+        self.entries = entries
         self.keys = list(entries[0]["feats"])
 
     def __len__(self) -> int:
         return len(self.entries[0]["targets"])
 
+    def __repr__(self) -> str:
+        meta = self.entries[0].get("meta", {})
+        where = f"{meta['task']}/{meta['split']}, " if meta else ""
+        versions = [e.get("meta", {}).get("variant", "?") or "base" for e in self.entries]
+        precision = f", {meta['precision']}" if meta else ""
+        return (
+            f"CachedFeatures({where}{len(self)} images, versions={versions}, "
+            f"cles={self.keys}{precision})"
+        )
+
     def __getitem__(self, i: int) -> tuple[dict[str, Tensor], Any]:
-        flip = len(self.entries) > 1 and random.random() < self.hflip
-        entry = self.entries[1 if flip else 0]
+        entry = random.choice(self.entries) if len(self.entries) > 1 else self.entries[0]
         return {k: entry["feats"][k][i] for k in self.keys}, entry["targets"][i]
+
+
+class FeatureStore:
+    """Features d'un backbone gele, extraites une fois puis relues : dossier du backbone
+    (`backbone_dir`), device, precision et DataLoader d'extraction sont fixes une fois ;
+    `dataset(tache, split, pipeline, cles)` renvoie un `CachedFeatures`."""
+
+    def __init__(
+        self,
+        backbone: nn.Module,
+        device: torch.device,
+        precision: str = "fp32",
+        num_workers: int = 0,
+        batch_size: int = 256,
+        info: dict | None = None,
+    ) -> None:
+        """`info` (config et origine du backbone) va dans info.json a la creation du dossier."""
+        self.backbone, self.device, self.precision = backbone, device, precision
+        self.num_workers, self.batch_size = num_workers, batch_size
+        self.sha = weights_hash(backbone)
+        self.dir = backbone_dir(self.sha, info)
+
+    def __repr__(self) -> str:
+        return f"FeatureStore({self.dir.name}, {self.precision}, {self.device})"
+
+    def dataset(
+        self, task: Task, split: str, pipeline: Pipeline, keys: list[str]
+    ) -> "CachedFeatures":
+        return CachedFeatures(self.entries(task, split, pipeline, keys))
+
+    def entries(
+        self, task: Task, split: str, pipeline: Pipeline, keys: list[str]
+    ) -> list[dict[str, Any]]:
+        """Une entree par version du pipeline ; extraite une fois, relue ensuite."""
+        keys = list(keys)
+        return [
+            self._load_or_extract(task, split, variant, t, keys)
+            for variant, t in pipeline.variants().items()
+        ]
+
+    def _load_or_extract(
+        self, task: Task, split: str, variant: str, pipeline: Pipeline, keys: list[str]
+    ) -> dict[str, Any]:
+        fp = pipeline.fingerprint()
+        path = cache_path(self.dir, task.name, split, variant, fp, self.precision, keys)
+        if path.exists():
+            entry = torch.load(path, map_location="cpu", weights_only=False, mmap=True)
+            coherent = entry["backbone_sha256"] == self.sha and entry["format"] == FORMAT
+            if not coherent or entry["meta"]["precision"] != self.precision:
+                raise ValueError(f"{path} : cache incoherent, le supprimer pour le recalculer")
+            return entry
+        label = f"{task.name}/{split}" + (f" ({variant})" if variant else "")
+        log.info("extraction des features %s -> %s", label, path)
+        entry = extract(self.backbone, task.build(split, pipeline), keys, self.batch_size,
+                        self.num_workers, self.device, self.precision)  # fmt: skip
+        entry["meta"] = {
+            "task": task.name,
+            "split": split,
+            "variant": variant,
+            "pipeline": repr(pipeline),
+            "keys": keys,
+            "precision": self.precision,
+        }
+        entry["format"], entry["backbone_sha256"] = FORMAT, self.sha
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _write_atomic(path, partial(torch.save, entry))
+        return entry
 
 
 def collate(native_targets: bool) -> Callable[[list], tuple[dict[str, Tensor], Any]]:

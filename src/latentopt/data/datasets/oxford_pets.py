@@ -10,10 +10,12 @@ Detection : boite de la tete et espece (0 chat, 1 chien), une instance par image
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
 from PIL import Image
+from torchvision import tv_tensors
 from torchvision.datasets import OxfordIIITPet as TvOxfordIIITPet
 
 from latentopt.data import splits
@@ -33,7 +35,7 @@ FOLDER = "oxford-iiit-pet"
 
 
 class PetsSegSource(SegSource):
-    """Split officiel ("trainval" | "test") -> (image PIL RGB, masque PIL dans {0, 1, 2})."""
+    """Split officiel ("trainval" | "test") -> (image PIL RGB, masque dans {0, 1, 2})."""
 
     def __init__(self, official_split: str, root: Path | None = None) -> None:
         root = root or datasets_root()
@@ -49,10 +51,10 @@ class PetsSegSource(SegSource):
     def __len__(self) -> int:
         return len(self.ds)
 
-    def __getitem__(self, i: int) -> tuple[Image.Image, Image.Image]:
+    def __getitem__(self, i: int) -> tuple[Image.Image, tv_tensors.Mask]:
         img, trimap = self.ds[i]
         # trimap {1, 2, 3} -> {0, 1, 2}
-        mask = Image.fromarray((np.asarray(trimap) - 1).astype(np.uint8))
+        mask = tv_tensors.Mask(torch.from_numpy((np.asarray(trimap) - 1).astype(np.uint8)))
         return img.convert("RGB"), mask
 
 
@@ -66,8 +68,16 @@ def trainval_rows(base: Path) -> list[tuple[str, int]]:
     return rows
 
 
+def read_box(path: Path) -> tuple[list[float], tuple[int, int]]:
+    """Boite VOC -> (xyxy en pixels, (H, W) de l'image)."""
+    root = ET.parse(path).getroot()
+    w, h = int(root.find("size/width").text), int(root.find("size/height").text)
+    b = root.find("object/bndbox")
+    return [float(b.find(k).text) for k in ("xmin", "ymin", "xmax", "ymax")], (h, w)
+
+
 class PetsDetSource(DetSource):
-    """Images de trainval annotees -> (image PIL RGB, {"box": xyxy dans [0, 1], "label"})."""
+    """Images de trainval annotees -> (image PIL RGB, {"box": boite xyxy en pixels, "label"})."""
 
     def __init__(self, root: Path | None = None) -> None:
         base = (root or datasets_root()) / FOLDER
@@ -88,19 +98,11 @@ class PetsDetSource(DetSource):
     def __len__(self) -> int:
         return len(self.items)
 
-    def __getitem__(self, i: int) -> tuple[Image.Image, dict[str, torch.Tensor | int]]:
-        name, label, box = self.items[i]
+    def __getitem__(self, i: int) -> tuple[Image.Image, dict[str, Any]]:
+        name, label, (box, size) = self.items[i]
         img = Image.open(self.images / f"{name}.jpg").convert("RGB")
-        return img, {"box": torch.tensor(box).clamp(0, 1), "label": label}
-
-
-def read_box(path: Path) -> list[float]:
-    """Boite VOC en pixels -> xyxy normalise par la taille de l'image."""
-    root = ET.parse(path).getroot()
-    w, h = float(root.find("size/width").text), float(root.find("size/height").text)
-    b = root.find("object/bndbox")
-    x1, y1, x2, y2 = (float(b.find(k).text) for k in ("xmin", "ymin", "xmax", "ymax"))
-    return [x1 / w, y1 / h, x2 / w, y2 / h]
+        boxes = tv_tensors.BoundingBoxes([box], format="XYXY", canvas_size=size)
+        return img, {"box": boxes, "label": label}
 
 
 class PetsPool(ClsSource):
@@ -158,11 +160,10 @@ class OxfordPets(DownloadableDataset):
             trainval, test = PetsSegSource("trainval", root), PetsSegSource("test", root)
             n = len(trainval)
             parts = splits.holdout(n)
-            parts["test"] = list(
-                range(n, n + len(test))
-            )  # ids du test a la suite de ceux de trainval
+            # ids du test a la suite de ceux de trainval
+            parts["test"] = list(range(n, n + len(test)))
             meta = {"pool": "trainval", "test": "test officiel", "seed": 0, "frac": 0.05}
-            return parts, trainval.ids() + test.ids(), meta
+            return splits.Computed(indices=parts, ids=trainval.ids() + test.ids(), meta=meta)
 
         return splits.freeze(SEG_NAME, compute, force)
 
@@ -172,7 +173,8 @@ class OxfordPets(DownloadableDataset):
         def compute() -> splits.Computed:
             source = PetsDetSource(root)
             meta = {"pool": "trainval+xmls", "seed": 0}
-            return splits.stratified(source.labels()), source.ids(), meta
+            indices = splits.stratified(source.labels())
+            return splits.Computed(indices=indices, ids=source.ids(), meta=meta)
 
         return splits.freeze(DET_NAME, compute, force)
 

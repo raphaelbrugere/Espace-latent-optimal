@@ -62,7 +62,7 @@ class Flowers102(DownloadableDataset):
                 split_ids = Flowers102Source(split, root).ids()
                 parts[split] = list(range(len(ids), len(ids) + len(split_ids)))
                 ids += split_ids
-            return parts, ids, {"official": True}
+            return splits.Computed(indices=parts, ids=ids, meta={"official": True})
 
         return [splits.freeze(self.NAME, compute, force)]
 

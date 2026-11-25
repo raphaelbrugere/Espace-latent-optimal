@@ -82,6 +82,18 @@ def test_unpushed_commit_only_warns_without_terminal(monkeypatch, capsys):
     assert "tracabilite" in capsys.readouterr().err
 
 
+def test_unanswerable_question_only_warns(monkeypatch, capsys):
+    """Windows : stdin=DEVNULL (NUL) passe pour un terminal, mais la lecture echoue (EOF)."""
+    monkeypatch.setattr(run, "unpushed_commit", lambda: "abc1234def")
+    monkeypatch.setattr(run.sys, "stdin", Stdin(tty=True))
+
+    def eof(_: str) -> str:
+        raise EOFError
+
+    assert run.confirm_pushed(ask=eof)
+    assert "tracabilite" in capsys.readouterr().err
+
+
 # --- lightning_settings ------------------------------------------------------------------
 
 
@@ -342,6 +354,9 @@ def test_mlflow_env_uri_no_warning_when_enabled(tmp_path, monkeypatch, caplog):
     assert "env.mlflow=false" not in caplog.text
 
 
+BB = "imnt160-vit_s8-lejepa-20261116_183012"
+
+
 def test_mlflow_records_config_git_and_results(tmp_path, monkeypatch):
     monkeypatch.setenv("SLURM_JOB_ID", "123")
     run_dir = run_dir_of(
@@ -412,9 +427,6 @@ def test_user_tracking_uri_is_preserved(tmp_path, monkeypatch):
     run.mlflow_logger(mlflow_cfg(tmp_path), "pretrain", run_dir, CLEAN).finalize("success")
     assert os.environ["MLFLOW_TRACKING_URI"] == "sqlite:///" + db.as_posix()
     assert db.exists() and not (run_dir / "mlflow.db").exists()
-
-
-BB = "imnt160-vit_s8-lejepa-20261116_183012"
 
 
 DS = "pets_seg-fpn-conv_seg-20261117_090000"

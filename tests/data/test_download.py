@@ -86,7 +86,7 @@ def toy_module(splits_module=None, present=False):
         def freeze_splits(root, force=False):
             calls["splits"].append(force)
             ids = [str(i) for i in range(10)]
-            compute = lambda: (splits_module.holdout(10), ids, {})  # noqa: E731
+            compute = lambda: splits_module.Computed(splits_module.holdout(10), ids, {})  # noqa: E731
             return splits_module.freeze("toy", compute, force)
 
     return Module, calls

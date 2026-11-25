@@ -16,6 +16,7 @@ import json
 import logging
 import os
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +25,15 @@ import numpy as np
 SPLITS_DIR = Path(__file__).parent / "splits"
 log = logging.getLogger(__name__)
 
-Computed = tuple[dict[str, list[int]], Sequence[str], dict[str, Any]]
+
+@dataclass(frozen=True)
+class Computed:
+    """Resultat du calcul d'un split, que `freeze` ecrit : les positions de chaque split dans
+    `ids`, les identifiants stables (ce que le JSON stocke) et les metadonnees du calcul."""
+
+    indices: dict[str, list[int]]
+    ids: Sequence[str]
+    meta: dict[str, Any]
 
 
 def holdout(n: int, frac: float = 0.05, seed: int = 0) -> dict[str, list[int]]:
@@ -50,20 +59,23 @@ def stratified(
     return {k: sorted(v) for k, v in out.items()}
 
 
-def save(name: str, splits: dict[str, list[int]], ids: Sequence[str], **meta: Any) -> Path:
-    """Convertit des indices en identifiants et ecrit le JSON (un id par ligne)."""
+def _save(name: str, splits: dict[str, list[int]], ids: Sequence[str], **meta: Any) -> Path:
+    """Convertit des indices en identifiants et ecrit le JSON (un id par ligne). Privee :
+    on n'ecrit un split que par `freeze`, qui refuse d'ecraser un fichier existant."""
     named = {split: sorted(str(ids[i]) for i in idx) for split, idx in splits.items()}
     path = SPLITS_DIR / f"{name}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"dataset": name, **meta, "splits": named}
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
+    # newline : LF meme sous Windows, comme les JSON commites (.gitattributes) ; reecrire un
+    # split inchange redonne alors le fichier de git octet pour octet
+    tmp.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8", newline="\n")
     os.replace(tmp, path)  # atomique : un job concurrent ne lit jamais un JSON a moitie ecrit
     return path
 
 
 def freeze(name: str, compute: Callable[[], Computed], force: bool = False) -> Path:
-    """Ecrit `splits/<name>.json` avec `compute()` = (indices par split, ids, meta).
+    """Ecrit `splits/<name>.json` avec le resultat de `compute()` (un `Computed`).
 
     Un JSON existant est conserve tel quel, sans appeler `compute` (donc sans toucher au
     dataset) : le reecrire change les ensembles, et avec eux la comparabilite des scores.
@@ -73,9 +85,9 @@ def freeze(name: str, compute: Callable[[], Computed], force: bool = False) -> P
     if existed and not force:
         log.info("splits %s : deja figes, conserves (%s)", name, path)
         return path
-    parts, ids, meta = compute()
-    path = save(name, parts, ids, **meta)
-    sizes = ", ".join(f"{k} {len(v)}" for k, v in parts.items())
+    result = compute()
+    path = _save(name, result.indices, result.ids, **result.meta)
+    sizes = ", ".join(f"{k} {len(v)}" for k, v in result.indices.items())
     log.info("splits %s : %s (%s) -> %s", name, "reecrits" if existed else "crees", sizes, path)
     return path
 
