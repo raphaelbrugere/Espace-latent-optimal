@@ -1,0 +1,16 @@
+# @package _global_
+# Base des configs env (defaults de local, ci, dce) : pas un environnement a choisir seul.
+# DATA_ROOT / OUTPUT_ROOT deplacent donnees et resultats (ex. disque partage du DCE).
+env:
+  name: ??? # chaque environnement le definit
+  data_root: ${oc.env:DATA_ROOT,${project_root:}/data}
+  results_root: ${oc.env:OUTPUT_ROOT,${project_root:}/results}
+  mlflow: true # base MLflow par run (<run>/mlflow.db) ; false : desactive (docs/MLFLOW.md, Limites)
+  # lo pretrain : recalcule les activations du backbone au backward : moins de memoire GPU,
+  # plus lent, meme resultat. auto : seulement sur un GPU de moins de 20 Go (run.py ; pourquoi
+  # ce seuil : slurm/README.md, Noeuds GPU, Memoire GPU). Selon la machine (baseline) :
+  #   true  : RTX 3080 (10 Go), RTX 2080 Ti (11 Go), RTX 5080 (16 Go)
+  #   false : RTX 3090 (24 Go), CPU (sans effet)
+  #   auto  : le bon choix sur toutes ces machines (seuil a 20 Go)
+  grad_checkpointing: false
+  compile: auto # torch.compile du backbone (lo pretrain) ; auto : si GPU et Triton, true : exige

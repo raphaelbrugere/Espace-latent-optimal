@@ -1,7 +1,6 @@
 {
   "files.exclude": {
     "**/.gitkeep": true,
-    "**/py.typed": true,
     "**/__pycache__": true,
     "**/.pytest_cache": true,
     "**/.ruff_cache": true,
@@ -9,22 +8,21 @@
     "**/.ipynb_checkpoints": true,
     "**/*.egg-info": true,
     ".venv": true,
-    "wandb": true,
     "lightning_logs": true
   },
   "files.watcherExclude": {
     "**/.venv/**": true,
     "**/outputs/**": true,
     "**/multirun/**": true,
-    "**/wandb/**": true,
     "**/lightning_logs/**": true,
     "data/**": true,
-    "datasets/**": true
+    "results/**": true
   },
   "search.exclude": {
     "**/outputs": true,
     "**/multirun": true,
-    "**/wandb": true,
+    "data": true,
+    "results": true,
     "uv.lock": true
   },
   "explorer.fileNesting.enabled": true,
@@ -45,5 +43,6 @@
     "editor.codeActionsOnSave": {
       "source.organizeImports": "explicit"
     }
-  }
+  },
+  "ruff.importStrategy": "fromEnvironment"
 }

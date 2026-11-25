@@ -1,0 +1,4 @@
+# Tete linear : classifieur lineaire sur un vecteur (neck embed_norm).
+# Fournis a l'execution : in_dim (neck) et num_classes (tache).
+_target_: latentopt.models.heads.LinearHead
+_partial_: true

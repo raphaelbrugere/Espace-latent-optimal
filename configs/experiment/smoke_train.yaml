@@ -1,0 +1,19 @@
+# @package _global_
+# Smoke run de `lo train` : neck et tete sur un ViT-S/8 a poids aleatoires, donnees synthetiques.
+#
+#   lo train experiment=smoke_train
+#   lo train experiment=smoke_train task=synthetic_cls,synthetic_seg,synthetic_det -m
+defaults:
+  - override /backbone: vit_s8
+
+experiment_name: smoke
+allow_dirty: true # smoke run : pas de garde-fou git sur le DCE (run.check_launch)
+task: synthetic_cls
+epochs: 2
+max_steps_per_epoch: 3
+batch_size: 8
+precision: fp32 # CPU
+
+trainer:
+  limit_val_batches: 1
+  log_every_n_steps: 1

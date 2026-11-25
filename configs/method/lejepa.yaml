@@ -1,0 +1,31 @@
+# LeJEPA : lambda*SIGReg + (1-lambda)*invariance sur les projections des V vues.
+# Valeurs de la baseline (exemple minimal LeJEPA), sauf la precision.
+# Tout ce qui change le resultat est ici, jamais dans env/.
+name: lejepa
+
+model: # latentopt.methods.LeJEPA ; backbone fourni a l'execution
+  _target_: latentopt.methods.LeJEPA
+  _partial_: true
+  proj_dim: 16 # dimension de sortie du projecteur (espace de SIGReg)
+  hidden_dim: 2048 # couches cachees du projecteur MLP
+  lamb: 0.02 # poids de SIGReg ; 1 - lamb pour l'invariance
+  num_probe_classes: ${data.num_probe_classes} # sonde en ligne, sur embeddings detaches
+
+num_views: 4 # vues augmentees par image
+epochs: 800
+batch_size: 128 # batch global, en images (x num_views passes dans le backbone)
+max_steps_per_epoch: null # entier pour raccourcir une epoch (smoke run)
+warmup_epochs: 1
+
+# fp16 par defaut : marche sur tout GPU. bf16 (celle de la baseline) exige un GPU Ampere ou plus
+# recent : refuse au demarrage sinon (run.py). fp32 en CPU.
+precision: fp16 # fp16 | bf16 | fp32
+
+optimizer: # latentopt.methods.build_optimizer ; modele et nombre de steps fournis a l'execution
+  _target_: latentopt.methods.build_optimizer
+  _partial_: true
+  lr: 2.0e-3
+  weight_decay: 5.0e-2
+  eta_min: 1.0e-3 # lr absolu en fin de cosinus, pas une fraction de lr
+  probe_lr: 1.0e-3
+  probe_weight_decay: 1.0e-7

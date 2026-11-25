@@ -1,0 +1,11 @@
+# @package _global_
+# GitHub Actions : CPU, pas de worker, donnees synthetiques uniquement.
+defaults:
+  - _base
+  - _self_
+
+env:
+  name: ci
+  num_workers: 0
+  device: cpu
+  progress_bar: false

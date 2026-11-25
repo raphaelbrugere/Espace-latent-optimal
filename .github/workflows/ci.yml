@@ -1,30 +1,70 @@
 name: CI
 
+# Seulement quand le code, les configs ou les dépendances changent : une PR de doc n'a que
+# le lint (lint.yml).
 on:
   push:
     branches: [main]
+    paths: &code
+      - "src/**"
+      - "configs/**"
+      - "tests/**"
+      - "slurm/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - ".github/workflows/ci.yml"
   pull_request:
+    paths: *code
 
 jobs:
-  ci:
+  # Tests rapides.
+  tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.3.3 # pas d'étiquette majeure depuis v8 : version exacte
         with:
+          version-file: pyproject.toml # uv de [tool.uv] required-version ; Python : .python-version
           enable-cache: true
 
       - name: Install
         run: uv sync --locked
 
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
-
-      - name: Lint (pre-commit)
-        run: uv run pre-commit run --all-files --show-diff-on-failure
-
       - name: Tests
-        run: uv run pytest
+        run: uv run pytest -m "not slow"
+
+  # Smoke test de bout en bout (tests/test_pipeline.py) : `lo pretrain experiment=smoke`,
+  # puis `lo train experiment=smoke_train` sur le backbone obtenu (from_run), puis
+  # `lo eval` et `lo mlflow sync`, avec env=ci (CPU, données synthétiques).
+  # Remplace le smoke run manuel avant tout job long ; job séparé : un échec ici désigne
+  # le pipeline, pas un test unitaire.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.3 # pas d'étiquette majeure depuis v8 : version exacte
+        with:
+          version-file: pyproject.toml # uv de [tool.uv] required-version ; Python : .python-version
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --locked
+
+      - name: Smoke pretrain -> train -> eval -> mlflow sync
+        run: uv run pytest -m slow --basetemp=smoke-runs -v
+
+      - name: Run dirs (si échec)
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-runs
+          path: |
+            smoke-runs/**/*.log
+            smoke-runs/**/*.yaml
+            smoke-runs/**/*.json
+            smoke-runs/**/*.txt
+            smoke-runs/**/*.csv
+          if-no-files-found: ignore

@@ -1,0 +1,34 @@
+# Config de premier niveau de `lo eval` : score de necks + tetes entraines par `lo train`.
+#
+#   lo eval downstream='[<run>/downstream/pets_seg-fpn-conv_seg-<date>,<run>/downstream/<...>]'
+#   lo eval downstream=... split=test      # score final : a la fin seulement
+#
+# Chaque entrainement evalue recoit un nouveau dossier eval/<split>-<date>/ : results.json,
+# config.yaml, git.txt, lineage.json et un run MLflow eval/<experiment_name> dans son
+# mlflow.db. Rien n'est modifie dans le dossier d'entrainement. Un entrainement est designe
+# par son chemin, ou par <run>/downstream/<...> : telecharge depuis le Hub s'il manque en local.
+defaults:
+  - common/hydra
+  - env: local # local | ci | dce (configs/env/) : la machine, sans effet sur le resultat
+  - launcher: null # null | long | short (slurm/launcher/) : job Slurm, avec -m ; choisit env=dce
+  - _self_
+
+downstream: ??? # dossiers downstream/<...>, sur un ou plusieurs backbones
+split: val # val pendant le developpement ; test seulement pour le score final
+cache_features: true # features du split en cache (data/features/), partage avec train
+precision: fp16 # fp16 | bf16 | fp32
+batch_size: 64
+
+experiment_name: default
+allow_dirty: true # une evaluation ne s'entraine pas : pas de garde-fou git
+
+hydra:
+  # profils Slurm (launcher=long|short) : dans slurm/launcher/, hors de configs/. Seule la
+  # config de premier niveau peut etendre le chemin de recherche de Hydra.
+  searchpath:
+    - file://${project_root:}/slurm
+  run: # journal du lancement (run.log) seulement : les resultats vont dans eval/ de chaque entrainement
+    dir: ${env.results_root}/.eval/${run_stamp:}
+  sweep:
+    dir: ${hydra.run.dir}
+    subdir: ${hydra.job.num}

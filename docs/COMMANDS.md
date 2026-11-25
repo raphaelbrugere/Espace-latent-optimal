@@ -1,0 +1,208 @@
+# Commandes du projet
+
+Tout passe par la commande `lo`, préfixée par `uv run` (`uv run lo --help` liste les commandes
+par famille ; `latentopt` est son nom long). Elle se lance depuis n'importe quel dossier du dépôt.
+Installation du compte DCE, partitions, nœuds et pièges de Slurm : voir [slurm/README.md](../slurm/README.md).
+
+Sur le DCE, `launcher=long` (ou `launcher=short`) soumet un job Slurm via submitit, à condition
+d'ajouter **`-m`**. Sans `-m`, le script refuse de tourner sur la passerelle. Place de `-m` :
+[Pièges](#pièges). La commande garde le terminal jusqu'à la fin des jobs : la lancer
+dans `tmux` ([slurm/README.md](../slurm/README.md#lancer-un-job)).
+
+## 1. Après chaque `git pull`
+
+```bash
+git pull && uv sync
+```
+
+## 2. Une fois : données et poids externes (sur la passerelle)
+
+```bash
+uv run lo data prepare imagenette   # pool de pré-entraînement (~100 Mo)
+uv run lo data prepare              # tout (~3,8 Go)
+uv run lo data prepare dino_vits8   # poids DINO (83 Mo)
+```
+
+Chaque dataset crée ses `src/latentopt/data/splits/*.json` manquants et garde les autres (`--force-splits`
+les réécrit). Sur une installation à jour, le diff git doit rester vide.
+
+## 3. Vérifier un nœud GPU (session interactive)
+
+```bash
+srun -p gpu_inter -t 00:30:00 --pty bash      # attendre que l'invite change de @chome au nom du nœud
+uv run python -c "import torch; print(torch.cuda.get_device_name(0), torch.cuda.get_arch_list()); torch.zeros(1).cuda()"
+uv run pytest
+exit
+```
+
+Sur une RTX 2080 Ti (nœuds `tx`), `sm_75` doit figurer dans la liste.
+
+## 4. Smoke tests (avant tout job long)
+
+| où | commande |
+|---|---|
+| local, CPU | `uv run lo pretrain experiment=smoke` |
+| DCE, dans une session `srun` | `uv run lo pretrain experiment=smoke env=dce method.precision=fp16` |
+| DCE, job Slurm | `uv run lo pretrain experiment=smoke launcher=short method.precision=fp16 -m` |
+| têtes, local | `uv run lo train experiment=smoke_train task=synthetic_cls,synthetic_seg,synthetic_det -m` |
+
+Dans une session `srun`, `env=dce` fonctionne sans `-m`, puisqu'on est déjà dans un job Slurm.
+`method.precision=fp16` sert à tester le GradScaler sur GPU. Le smoke run est en fp32 par défaut,
+pour pouvoir tourner sur CPU.
+
+## 5. Pré-entraînement d'un backbone
+
+```bash
+# baseline (bf16, 800 epochs)
+uv run lo pretrain experiment=vit_lejepa_imagenette launcher=long -m
+
+# changer un réglage
+uv run lo pretrain experiment=vit_lejepa_imagenette method.model.lamb=0.05 launcher=long -m
+
+# balayer plusieurs valeurs : un job par combinaison (ici 3 x 3 = 9 jobs, 4 a la fois)
+uv run lo pretrain experiment=vit_lejepa_imagenette method.model.lamb=0.01,0.02,0.05 seed=0,1,2 launcher=long -m
+
+# grad_checkpointing : auto avec env=dce (active sur une RTX 3080, pas sur une 3090) ;
+# true ou false pour l'imposer, meme resultat :
+uv run lo pretrain experiment=vit_lejepa_imagenette env.grad_checkpointing=true launcher=long -m
+
+# reprendre un run interrompu depuis son last.ckpt (chemin absolu, relatif à la racine du dépôt,
+# ou commençant par <run>) : le run repris écrit dans un NOUVEAU dossier daté, avec son propre
+# metrics.csv et son propre run MLflow ; results.json y note resumed_from. L'ancien dossier
+# n'est pas modifié et reste sans results.json (run inachevé, jamais publié).
+uv run lo pretrain experiment=vit_lejepa_imagenette resume=<run>/backbone/checkpoints/last.ckpt launcher=long -m
+```
+
+Sortie : `results/<données>-<archi>-<méthode>-<AAAAMMJJ_HHMMSS>/backbone/` : `backbone.pt`, `results.json`
+(écrit en dernier) et les fichiers communs à tout run (liste : [HUB.md](HUB.md#un-dossier-par-backbone)). Dans un balayage `-m`, les
+jobs 1, 2… ajoutent `_1`, `_2`… à la date (propre à chaque job sur Slurm, commune en local). `<données>-<archi>-<méthode>-<date>` est le dossier du backbone, de
+ses entraînements downstream et de leurs évaluations, et son dépôt Hugging Face ([docs/HUB.md](HUB.md)).
+
+## 6. Entraînement des necks et des têtes (backbone gelé)
+
+```bash
+# une tâche, sur un de nos backbones
+uv run lo train backbone=from_run backbone.run=<run> task=pets_seg launcher=long -m
+
+# les 5 tâches, un job chacune
+uv run lo train backbone=from_run backbone.run=<run> \
+    task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det launcher=long -m
+
+# référence DINO (poids externes), mêmes 5 tâches ; backbone_run fixé pour que les 5 jobs
+# rangent leurs têtes sous le même nom de backbone (sinon chaque job date le sien)
+uv run lo train backbone=vit_s8_dino experiment_name=dino backbone_data=imagenet1k backbone_method=dino \
+    backbone_run=imagenet1k-vit_s8_dino-dino-<AAAAMMJJ_HHMMSS> \
+    task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det launcher=long -m
+
+# un autre neck ou une autre tête, ou d'autres réglages
+uv run lo train backbone=from_run backbone.run=<run> task=pets_seg neck=fpn neck.channels=128 head=conv_seg epochs=50 launcher=long -m
+
+# une tête sur un neck déjà entraîné (gelé) : seule la tête apprend
+uv run lo train backbone=from_run backbone.run=<run> task=pets_det head=soft_argmax neck_from=pets_seg-fpn-conv_seg-<AAAAMMJJ_HHMMSS> launcher=long -m
+
+# sans cache de features : backbone appliqué à la volée (voir plus bas)
+uv run lo train backbone=from_run backbone.run=<run> task=pets_seg cache_features=false launcher=long -m
+
+# reprendre un entraînement interrompu : mêmes règles que pour lo pretrain (nouveau dossier
+# downstream/<...> daté, resumed_from dans results.json, ancien dossier laissé sans results.json)
+uv run lo train backbone=from_run backbone.run=<run> task=pets_seg resume=<run>/downstream/<dossier>/checkpoints/last.ckpt launcher=long -m
+```
+
+Sans précision, le neck, la tête et le nombre d'epochs sont ceux de la baseline de chaque tâche.
+
+Sortie, dans le dossier du backbone `results/<run>/` ([docs/HUB.md](HUB.md)) :
+`downstream/<tâche>-<neck>-<tête>-<AAAAMMJJ_HHMMSS>/` : `neck.pt`, `head.pt`, `results.json` (score val,
+paramètres du neck et de la tête séparés, du backbone ; écrit en dernier) et les fichiers communs à tout run
+(liste : [HUB.md](HUB.md#un-dossier-par-backbone)).
+Avec `neck_from`, pas de `neck.pt` : le neck repris reste gelé, et `results.json` désigne son dossier.
+
+**Cache de features.** Il est activé par défaut. Les features du backbone sont calculées une
+fois dans `data/features/<date>_<empreinte>/`, puis relues. L'algorithme est le même que sans cache,
+mais les tirages aléatoires (ordre des images, retournements) diffèrent, comme avec une autre
+graine. `cache_features=false` applique le backbone à la volée à chaque epoch.
+
+## 7. Évaluation
+
+```bash
+# évaluer des entraînements sur val (un ou plusieurs backbones)
+uv run lo eval downstream='[<run>/downstream/imagenette_cls-embed_norm-linear-<date>,<run>/downstream/pets_seg-fpn-conv_seg-<date>]'
+
+# score final sur test : une seule fois, à la fin
+uv run lo eval downstream='[...]' split=test
+```
+
+Sortie : un nouveau dossier `eval/<split>-<AAAAMMJJ_HHMMSS>/` dans chaque dossier évalué, avec
+`results.json` (score, métriques, paramètres du backbone, du neck et de la tête, violations ; écrit en
+dernier), un run MLflow `eval/<experiment_name>` dans son `mlflow.db`, et les autres fichiers listés dans
+[HUB.md](HUB.md#un-dossier-par-backbone). Le dossier
+d'entraînement n'est pas modifié. Seul le journal du lancement (`run.log`) va dans `results/.eval/<date>/`. Violations signalées :
+backbone de plus de 30M paramètres, neck ou tête appris sur d'autres poids que ceux chargés.
+
+## 8. Suivre les jobs
+
+```bash
+squeue -u <login>                                   # jobs en cours ou en attente
+scancel <job_id>                                    # annuler
+sacct -j <job_id> --format=JobID,State,Elapsed,MaxRSS
+tail -f results/<run>/backbone/run.log             # avancement, une ligne par epoch
+ls results/.submitit/<job_id>/                      # sorties brutes de Slurm (stdout, stderr)
+```
+
+## 9. Comparer les runs (MLflow)
+
+Mode d'emploi court (usage local, filtres, comparaisons) : [docs/MLFLOW.md](MLFLOW.md).
+
+Chaque run (`pretrain`, `train`, et chaque évaluation de `eval`) a sa propre base MLflow,
+`<dossier du run>/mlflow.db`.
+Un seul programme écrit dans chaque base, donc aucun conflit entre jobs simultanés sur le disque
+réseau. Un run MLflow contient :
+
+| | Contenu |
+|---|---|
+| Expérience | `pretrain/<experiment_name>`, `train/<experiment_name>`, `eval/<experiment_name>` |
+| Nom | chemin du dossier sous `results/` : `<run>/backbone`, `<run>/downstream/<tâche>-<neck>-<tête>-<date>` (train), suivi de `/eval/<split>-<date>` (eval) |
+| Paramètres | config résolue complète, aplatie avec `/` jusqu'aux feuilles : `method/optimizer/lr`, `method/model/lamb` (pretrain), `optimizer/lr`, `neck/channels` (train) ; y compris `env/*` (propre à la machine) |
+| Métriques | courbes par pas et par epoch (`train/*`, `val/*`) ; résultats finaux `results/*` (scores, paramètres, heures GPU) |
+| Tags : nom | `data`, `arch`, `method`, `backbone_date`, `backbone_run`, `stage`, `hub_repo` (dépôt de destination, [docs/HUB.md](HUB.md)), plus `task`, `neck`, `head` et `downstream` (nom du dossier d'entraînement, commun à l'entraînement et à ses évaluations) |
+| Tags : traçabilité | `author`, `git_commit`, `git_branch`, `git_dirty`, `uv_lock_sha256`, `splits/<dataset>_sha256`, `results/backbone_sha256` |
+| Tags : machine | `host`, `env`, `slurm_job_id`, `env/python`, `env/torch`, `env/cuda`, `env/gpu`, `run_dir` |
+| Tags : évaluation | `eval_split` : `val` ou `test` |
+
+N'y entrent jamais : les poids (dossier du run, Hub) et les variables d'environnement (tokens).
+
+Pour comparer tous nos modèles : `uv run lo mlflow sync` (base d'équipe `data/mlflow.db`). Sources, relances,
+runs en cours, interface et tunnel SSH : [MLFLOW.md](MLFLOW.md). `env.mlflow=false` désactive le suivi
+(interaction avec `MLFLOW_TRACKING_URI` : [MLFLOW.md](MLFLOW.md#limites)).
+
+## 10. Récupérer des résultats (sur sa machine)
+
+```bash
+scp -r dce:~/Espace-latent-optimal/results/<run> .   # ou lo hub push <run> sur le DCE, puis lo hub pull <run>
+```
+
+## 11. Vider les fichiers générés (repartir de zéro)
+
+```bash
+uv run lo clear --target features mlflow   # une partie : results datasets features models mlflow cache
+uv run lo clear --all                      # tout ; irréversible : récupérer les résultats avant
+uv run lo clear --help
+```
+
+Seuls les fichiers non suivis par git sont supprimés (les `.gitkeep` de `data/` restent). La liste
+et la taille de ce qui va être supprimé sont affichées, puis une confirmation `y/n` est toujours
+demandée. Les emplacements suivent les variables d'environnement ([DATASETS.md](DATASETS.md#variables-denvironnement)).
+Après `datasets` ou `models`, relancer la section 2.
+
+## Pièges
+
+- **`-m` : après tous les overrides, ou avant tous : pas au milieu.**
+- **Arbre git non commité.** `lo pretrain` et `lo train` sur le DCE (job Slurm ou session `srun`)
+  refusent de partir si des fichiers ne sont pas commités (CONTRIBUTING.md). `allow_dirty=true`
+  lève ce garde-fou, en connaissance de cause. Les configs smoke mettent `allow_dirty: true`, et
+  `lo eval` l'a à `true` par défaut (`configs/eval.yaml`).
+- **La précision.** fp16 par défaut : il marche sur tout GPU. Le bf16 exige un GPU Ampere ou plus
+  récent ; sur un GPU plus ancien, le run s'arrête au démarrage. `launcher=long` ne sert que des
+  GPU compatibles. Le fp16 n'est pas disponible sur CPU.
+- **Pièges propres à Slurm et au DCE** (gres, fairshare, nœuds) : [slurm/README.md](../slurm/README.md#pièges).
+- **Windows, en local.** Avec beaucoup de workers, Windows peut manquer de mémoire virtuelle
+  (`WinError 1455`). Dans ce cas, `env.num_workers=2`.

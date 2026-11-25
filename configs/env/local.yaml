@@ -1,0 +1,11 @@
+# @package _global_
+# Machine personnelle. Environnement uniquement : rien qui change le resultat d'un run.
+defaults:
+  - _base
+  - _self_
+
+env:
+  name: local
+  num_workers: 4
+  device: auto # cuda si disponible, sinon cpu
+  progress_bar: true

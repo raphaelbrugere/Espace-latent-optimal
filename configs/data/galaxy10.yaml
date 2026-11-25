@@ -1,0 +1,9 @@
+# Pool de pre-entrainement : split train fige de Galaxy10 DECaLS (80 %, 14 185 images), labels
+# pour la sonde en ligne seulement. Hors protocole (pool du protocole : imagenette) : scores
+# non comparables a ceux de la baseline. Val et test n'y entrent pas.
+# Prerequis : lo data prepare galaxy10
+source:
+  _target_: latentopt.data.datasets.galaxy10.DATASET.pretraining_images
+img_size: 128
+num_probe_classes: 10
+probe_task: galaxy10_cls # val de la sonde en ligne : split val fige, hors du pool

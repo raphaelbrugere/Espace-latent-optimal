@@ -1,19 +1,58 @@
 [project]
 name = "latentopt"
 version = "0.1.0"
-description = "Backbone de vision pré-entraîné en auto-supervisé (LeJEPA) et têtes supervisées, pour l'embarqué"
+description = "Backbone de vision pre-entraine en auto-supervise (LeJEPA) et tetes supervisees, pour l'embarque"
 readme = "README.md"
 authors = [
     { name = "Flavien Liardet", email = "flavien.liardet@student-cs.fr" },
     { name = "Ethan Bitton", email = "ethan.bitton@student-cs.fr" },
-    { name = "Raphaël Brugère", email = "raphael.brugere@student-cs.fr" },
+    { name = "Raphael Brugere", email = "raphael.brugere@student-cs.fr" },
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "datasets>=5.1.0",
+    "huggingface-hub>=2.4.0",
+    "hydra-core>=1.3.8",
+    "hydra-submitit-launcher>=1.2.0",
+    "lightning>=2.6.6",
+    "mlflow>=3.18.0",
+    "scipy>=1.18.1",
+    "timm>=1.0.31",
+    "torch>=2.15",
+    "torchvision>=0.29",
+    # Triton (torch.compile) : fourni par torch sous Linux, portage communautaire sous Windows.
+    # Meme majeure.mineure que le triton de torch dans uv.lock : a changer avec torch.
+    "triton-windows>=3.9,<3.10 ; sys_platform == 'win32'",
+]
+
+[project.scripts]
+# point d'entree unique (src/latentopt/cli/__init__.py) ; latentopt = nom long de lo
+lo = "latentopt.cli:main"
+latentopt = "latentopt.cli:main"
 
 [build-system]
-requires = ["uv_build>=0.11.27,<0.12.0"]
+requires = ["uv_build>=0.13.7,<0.14"]
 build-backend = "uv_build"
+
+[tool.uv]
+# Version de uv figee pour tous (local, CI, DCE) : uv refuse de tourner dans une autre version.
+# Mise a jour : changer ici, dans INSTALL.md (etape 1) et slurm/README.md (etape 4), puis
+# `uv self update <version>` partout. Python : .python-version, puis `uv sync`.
+required-version = "==0.13.7"
+# Python telecharge par uv (version exacte de .python-version), jamais celui du systeme :
+# le DCE fournit 3.12.3, Windows celui installe a la main.
+python-preference = "only-managed"
+
+# torch depuis l'index PyTorch partout : sur PyPI, la wheel Windows est CPU uniquement.
+# cu132 = CUDA de torch 2.15 (uv.lock) ; drivers du DCE : slurm/README.md.
+[[tool.uv.index]]
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu132" }
+torchvision = { index = "pytorch-cu132" }
 
 [dependency-groups]
 dev = [
@@ -27,7 +66,22 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B"]
+# D100, D101 : docstring de module et de classe ;
+# ANN001, ANN201 : parametres et retour annotes sur les fonctions publiques
+select = ["E", "F", "W", "I", "UP", "B", "D100", "D101", "ANN001", "ANN201"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D100", "D101", "ANN001", "ANN201"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: smoke test de bout en bout par les commandes lo (pytest -m \"not slow\" pour l'exclure)",
+]
+filterwarnings = [
+    # bruit de Lightning en test (CPU, num_workers=0, petits batches) : sans effet sur le resultat
+    "ignore:.*does not have many workers.*",
+    'ignore:.*isinstance\(treespec, LeafSpec\).*',
+    # interne a MLflow (SQLAlchemy), sans effet sur nos runs
+    "ignore:.*noload.*loader strategy is deprecated.*",
+]

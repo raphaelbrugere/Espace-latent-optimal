@@ -1,0 +1,112 @@
+"""Splits figes : calcules une fois, commites dans `splits/<dataset>.json`.
+
+Les splits derives (holdout, stratifie) sont stockes par identifiant stable (chemin
+relatif, nom de fichier, ligne d'une revision HF epinglee), jamais par indice : un
+changement d'ordre de listage cote torchvision ou HF ne peut pas les deplacer.
+
+Les splits officiels (Flowers-102, tests d'Imagenette et de Pets) passent par le meme
+mecanisme : le JSON liste les identifiants que la definition officielle du dataset donne.
+
+Chaque dataset definit son calcul dans sa methode `freeze_splits`, appelee par ses
+constructeurs de splits : un JSON existant est lu tel quel, sinon il est cree. `freeze` ne
+le reecrit qu'avec `force`.
+"""
+
+import json
+import logging
+import os
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+SPLITS_DIR = Path(__file__).parent / "splits"
+log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class Computed:
+    """Resultat du calcul d'un split, que `freeze` ecrit : les positions de chaque split dans
+    `ids`, les identifiants stables (ce que le JSON stocke) et les metadonnees du calcul."""
+
+    indices: dict[str, list[int]]
+    ids: Sequence[str]
+    meta: dict[str, Any]
+
+
+def holdout(n: int, frac: float = 0.05, seed: int = 0) -> dict[str, list[int]]:
+    """Permutation fixe ; les `frac` premiers en val, le reste en train."""
+    perm = np.random.RandomState(seed).permutation(n)
+    k = max(1, int(n * frac))
+    return {"train": perm[k:].tolist(), "val": perm[:k].tolist()}
+
+
+def stratified(
+    labels: Sequence[int], fracs: tuple[float, float, float] = (0.8, 0.1, 0.1), seed: int = 0
+) -> dict[str, list[int]]:
+    """Partition train / val / test par classe, permutation fixe dans chaque classe."""
+    labels = np.asarray(labels)
+    rng = np.random.RandomState(seed)
+    out = {"train": [], "val": [], "test": []}
+    for c in np.unique(labels):
+        idx = rng.permutation(np.flatnonzero(labels == c))
+        a, b = int(len(idx) * fracs[0]), int(len(idx) * (fracs[0] + fracs[1]))
+        out["train"] += idx[:a].tolist()
+        out["val"] += idx[a:b].tolist()
+        out["test"] += idx[b:].tolist()
+    return {k: sorted(v) for k, v in out.items()}
+
+
+def _save(name: str, splits: dict[str, list[int]], ids: Sequence[str], **meta: Any) -> Path:
+    """Convertit des indices en identifiants et ecrit le JSON (un id par ligne). Privee :
+    on n'ecrit un split que par `freeze`, qui refuse d'ecraser un fichier existant."""
+    named = {split: sorted(str(ids[i]) for i in idx) for split, idx in splits.items()}
+    path = SPLITS_DIR / f"{name}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"dataset": name, **meta, "splits": named}
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    # newline : LF meme sous Windows, comme les JSON commites (.gitattributes) ; reecrire un
+    # split inchange redonne alors le fichier de git octet pour octet
+    tmp.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8", newline="\n")
+    os.replace(tmp, path)  # atomique : un job concurrent ne lit jamais un JSON a moitie ecrit
+    return path
+
+
+def freeze(name: str, compute: Callable[[], Computed], force: bool = False) -> Path:
+    """Ecrit `splits/<name>.json` avec le resultat de `compute()` (un `Computed`).
+
+    Un JSON existant est conserve tel quel, sans appeler `compute` (donc sans toucher au
+    dataset) : le reecrire change les ensembles, et avec eux la comparabilite des scores.
+    `force` ne sert qu'a le faire expres."""
+    path = SPLITS_DIR / f"{name}.json"
+    existed = path.exists()
+    if existed and not force:
+        log.info("splits %s : deja figes, conserves (%s)", name, path)
+        return path
+    result = compute()
+    path = _save(name, result.indices, result.ids, **result.meta)
+    sizes = ", ".join(f"{k} {len(v)}" for k, v in result.indices.items())
+    log.info("splits %s : %s (%s) -> %s", name, "reecrits" if existed else "crees", sizes, path)
+    return path
+
+
+def load(name: str) -> dict[str, Any]:
+    """JSON fige du dataset ; `FileNotFoundError` si les splits n'ont pas ete geles."""
+    path = SPLITS_DIR / f"{name}.json"
+    if not path.exists():
+        raise FileNotFoundError(f"{path} absent : lance `uv run lo data prepare`")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def indices(name: str, split: str, ids: Sequence[str]) -> list[int]:
+    """Indices, dans la source chargee, des identifiants du split fige."""
+    position = {str(i): k for k, i in enumerate(ids)}
+    wanted = load(name)["splits"][split]
+    missing = [i for i in wanted if i not in position]
+    if missing:
+        raise KeyError(
+            f"{name}/{split} : {len(missing)} identifiants introuvables, ex. {missing[:3]}"
+        )
+    return [position[i] for i in wanted]

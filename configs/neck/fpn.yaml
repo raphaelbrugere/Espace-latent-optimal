@@ -1,0 +1,7 @@
+# Neck fpn : fusion top-down des cartes du backbone (FPN), sortie au stride le plus fin.
+# Fourni a l'execution : feature_info (backbone). Variante : neck.channels=128 (meme nom de dossier).
+_target_: latentopt.models.necks.FPNNeck
+_partial_: true
+channels: 64 # largeur commune apres les projections laterales 1x1
+levels: null # cartes a fusionner, ex. [block9, block12] ; null = toutes
+upsample: nearest # mode d'interpolation top-down : nearest | bilinear

@@ -1,0 +1,23 @@
+# @package _global_
+# Smoke run : verifie le pipeline de bout en bout (CPU), avant tout job long.
+# Donnees synthetiques, scores sans signification.
+#
+#   lo pretrain experiment=smoke
+#   lo pretrain experiment=smoke launcher=short method.precision=fp16 -m   # DCE (slurm/README.md)
+defaults:
+  - override /backbone: vit_s8
+  - override /data: synthetic
+
+experiment_name: smoke
+allow_dirty: true # smoke run : pas de garde-fou git sur le DCE (run.check_launch)
+
+method:
+  num_views: 2
+  epochs: 2
+  batch_size: 8
+  max_steps_per_epoch: 3
+  precision: fp32 # CPU ; fp16 sur GPU pour tester le GradScaler
+
+trainer:
+  limit_val_batches: 1
+  log_every_n_steps: 1

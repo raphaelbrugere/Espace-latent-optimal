@@ -1,0 +1,6 @@
+# Neck conv_trunk : tronc convolutif sur une carte du backbone (detection).
+# Fourni a l'execution : feature_info (backbone). Variante : neck.channels=64 (meme nom de dossier).
+_target_: latentopt.models.necks.ConvTrunk
+_partial_: true
+channels: 128 # largeur du tronc convolutif
+level: block12 # carte lue (nom dans feature_info) ; block12 = la plus profonde du ViT-S/8

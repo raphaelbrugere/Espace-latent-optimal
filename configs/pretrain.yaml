@@ -1,0 +1,43 @@
+# Config de premier niveau de `lo pretrain` : pre-entrainement d'un backbone.
+#
+#   lo pretrain backbone=vit_s8                        # local
+#   lo pretrain experiment=smoke                       # smoke run
+#   lo pretrain experiment=<nom> launcher=long -m      # job Slurm (slurm/README.md)
+#
+# Chaque run ecrit dans results/<donnees>-<archi>-<methode>-<AAAAMMJJ_HHMMSS>/backbone/ :
+# backbone.pt, results.json (ecrit en dernier) et les fichiers communs a tout run (liste complete :
+# docs/HUB.md#un-dossier-par-backbone). <donnees> est le nom court (ABBREV) du
+# dataset, ex. imnt160 : il est dans le code, pas dans les configs.
+# <donnees>-<archi>-<methode>-<date> est le dossier du backbone, de ses entrainements
+# downstream et de leurs evaluations, et son depot Hugging Face (docs/HUB.md).
+defaults:
+  - common/hydra
+  - backbone: ??? # obligatoire : aucun backbone par defaut
+  - method: lejepa
+  - data: imagenette
+  - env: local # local | ci | dce (configs/env/) : la machine, sans effet sur le resultat
+  - launcher: null # null | long | short (slurm/launcher/) : job Slurm, avec -m ; choisit env=dce
+  - _self_
+  - optional experiment: null # experiment=<nom> : configs/experiment/<nom>.yaml
+
+experiment_name: default # chaque fichier de configs/experiment/ le redefinit
+seed: 0
+resume: null # last.ckpt d'un run interrompu ; nouveau dossier date (docs/COMMANDS.md)
+allow_dirty: false # true : autorise un run sur le DCE (job ou session interactive) avec un arbre git non commite
+
+trainer: # reglages du Trainer sans effet sur le resultat de l'entrainement
+  limit_val_batches: null # entier : sonde evaluee sur une partie du val (smoke run)
+  log_every_n_steps: 50
+
+hydra:
+  # profils Slurm (launcher=long|short) : dans slurm/launcher/, hors de configs/. Seule la
+  # config de premier niveau peut etendre le chemin de recherche de Hydra.
+  searchpath:
+    - file://${project_root:}/slurm
+  # Un seul nom, celui du sweep : date suffixee par _<n> pour le job n > 0 d'un -m. Sans -m,
+  # hydra.job.num vaut ??? : oc.select le remplace par "" (pas de suffixe).
+  run:
+    dir: ${hydra.sweep.dir}/${hydra.sweep.subdir}
+  sweep:
+    dir: ${env.results_root}
+    subdir: ${run_name:${data_abbrev:${data.source._target_}},${hydra.runtime.choices.backbone},${hydra.runtime.choices.method},${oc.select:hydra.job.num,""}}/backbone

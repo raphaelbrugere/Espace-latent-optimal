@@ -1,0 +1,13 @@
+# @package _global_
+# Reglages Hydra communs aux points d'entree (pretrain, train, eval), en tete de leurs defaults.
+# Chacun ne definit ensuite que ses dossiers (hydra.run.dir, hydra.sweep).
+hydra:
+  # pas de sous-dossier .hydra/ : le config.yaml resolu ecrit par run.prepare suffit, et .hydra/
+  # serait publie sur le Hub avec le dossier du run (hub.files n'exclut que EXCLUDED_DIRS).
+  output_subdir: null
+  job:
+    chdir: false # le code tourne depuis le dossier de lancement
+  job_logging:
+    handlers:
+      file:
+        filename: ${hydra.runtime.output_dir}/run.log

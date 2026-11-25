@@ -1,0 +1,64 @@
+"""ViT timm au contrat Backbone : `embed` + une carte de features par bloc lu.
+
+Un ViT simple n'a pas de pyramide : toutes les cartes sont au stride du patch. C'est la
+principale faiblesse de ce backbone pour les taches denses (cf. simple feature pyramid
+de ViTDet, ou un ConvNet).
+
+`embed` est la sortie de `forward_head` de timm : pooling (token CLS par defaut), puis,
+si `embed_dim` est donne, une projection lineaire apprise avec le backbone pendant le
+pre-entrainement. `embed_dim=None` : pas de projection, `embed` = token CLS (largeur
+du ViT), comme dans le protocole d'evaluation de DINO.
+
+Entree dans [0, 1], normalisee par le backbone (contrat : models/contract.py).
+
+Poids aleatoires uniquement : les poids externes sont charges par `backbones/external/`.
+"""
+
+import timm
+import torch.nn as nn
+from torch import Tensor
+
+from latentopt.models.contract import normalize_input, register_input_norm
+
+
+class TimmViT(nn.Module):
+    """`blocks` : indices (0-based) des blocs dont on expose la carte, nommee `block{i+1}`.
+
+    `forward` renvoie ces cartes (B, C, H/stride, W/stride) plus `embed` (B, embed_dim).
+    """
+
+    def __init__(
+        self,
+        arch: str = "vit_small_patch8_224",
+        img_size: int = 128,
+        embed_dim: int | None = 512,
+        blocks: tuple[int, ...] = (2, 5, 8, 11),
+        drop_path_rate: float = 0.0,
+        grad_checkpointing: bool = False,
+    ) -> None:
+        super().__init__()
+        self.vit = timm.create_model(
+            arch,
+            img_size=img_size,
+            num_classes=embed_dim or 0,
+            drop_path_rate=drop_path_rate,
+            dynamic_img_size=True,  # pre-entrainement et taches a des resolutions differentes
+        )
+        self.vit.set_grad_checkpointing(grad_checkpointing)
+        register_input_norm(self)  # statistiques ImageNet : celles des poids timm et DINO
+
+        self.blocks = list(blocks)
+        self.embed_dim = embed_dim or self.vit.num_features
+        stride = self.vit.patch_embed.patch_size[0]
+        self.feature_info = [
+            {"name": f"block{b + 1}", "channels": self.vit.embed_dim, "stride": stride}
+            for b in self.blocks
+        ]
+
+    def forward(self, x: Tensor) -> dict[str, Tensor]:
+        final, maps = self.vit.forward_intermediates(
+            normalize_input(self, x), indices=self.blocks, intermediates_only=False
+        )
+        out = {f["name"]: m for f, m in zip(self.feature_info, maps, strict=True)}
+        out["embed"] = self.vit.forward_head(final)
+        return out

@@ -1,0 +1,75 @@
+# Config de premier niveau de `lo train` : un neck et une tete sur un backbone gele.
+#
+#   lo train backbone=from_run backbone.run=<run> task=pets_seg              # neck + tete de la tache
+#   lo train backbone=from_run backbone.run=<run> task=pets_seg neck=fpn head=conv_seg neck.channels=128
+#   lo train backbone=from_run backbone.run=<run> task=pets_det head=soft_argmax \
+#       neck_from=pets_seg-fpn-conv_seg-20261117_090000                      # neck gele, tete seule
+#   lo train backbone=vit_s8_dino backbone_data=imagenet1k backbone_method=dino task=imagenette_cls
+#   lo train backbone=from_run backbone.run=<run> \
+#       task=imagenette_cls,flowers102_cls,galaxy10_cls,pets_seg,pets_det -m  # les 5 taches
+# (-m apres tous les overrides, ou avant tous : pas au milieu)
+#
+# neck, head et epochs absents : ceux de la baseline de la tache (evaluation/tasks.py).
+# Chaque run ecrit dans results/<run>/ (docs/HUB.md) :
+#   downstream/<tache>-<neck>-<tete>-<AAAAMMJJ_HHMMSS>/
+#       neck.pt (pas avec neck_from), head.pt, results.json (ecrit en dernier) et les fichiers
+#       communs a tout run (liste complete : docs/HUB.md#un-dossier-par-backbone)
+defaults:
+  - common/hydra
+  - backbone: ??? # obligatoire : from_run, vit_s8_dino...
+  - neck: null # null : neck par defaut de la tache (configs/neck/)
+  - head: null # null : tete par defaut de la tache (configs/head/)
+  - env: local # local | ci | dce (configs/env/) : la machine, sans effet sur le resultat
+  - launcher: null # null | long | short (slurm/launcher/) : job Slurm, avec -m ; choisit env=dce
+  - _self_
+  - optional experiment: null
+
+task: ??? # nom d'une tache du registre (evaluation/tasks.py)
+# Neck gele, repris d'un entrainement precedent sur le meme backbone : <tache>-<neck>-<tete>-<date>
+# (dossier downstream/ du backbone), ou chemin / nom complet (<run>/downstream/<...>). Seule la tete
+# apprend ; le dossier du run porte le nom du neck repris.
+neck_from: null
+experiment_name: default
+# Nom du backbone dans les dossiers et sur le Hub (<donnees>-<archi>-<methode>-<date>).
+# backbone=from_run : celui du run de pre-entrainement. Backbone externe ou aleatoire :
+# <backbone_data>-<choix de backbone>-<backbone_method>-<date du lancement>. Fixer backbone_run
+# (ex. imagenet1k-vit_s8_dino-dino-20261116_180000) pour que les tetes d'un meme backbone
+# externe, lancees dans des jobs separes, partagent le meme dossier.
+backbone_run: ""
+backbone_data: none # donnees de pre-entrainement d'un backbone externe (ex. imagenet1k)
+backbone_method: none # methode d'un backbone externe (ex. dino)
+seed: 0 # graine du neck et de la tete (init, ordre des donnees), enregistree dans les .pt
+resume: null # last.ckpt d'un entrainement interrompu ; nouveau dossier date (docs/COMMANDS.md)
+allow_dirty: false # true : autorise un run sur le DCE (job ou session interactive) avec un arbre git non commite
+
+# Features du backbone extraites une fois dans data/features/ (cle : empreinte du backbone),
+# puis neck et tete entraines dessus. false : backbone applique a la volee a chaque epoch.
+cache_features: true
+
+# Recette de la baseline des tetes
+epochs: null # null : epochs par defaut de la tache
+max_steps_per_epoch: null
+batch_size: 64
+precision: fp16 # fp16 | bf16 | fp32 (voir method/lejepa.yaml)
+optimizer:
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+
+trainer:
+  limit_val_batches: null
+  log_every_n_steps: 50
+
+hydra:
+  # profils Slurm (launcher=long|short) : dans slurm/launcher/, hors de configs/. Seule la
+  # config de premier niveau peut etendre le chemin de recherche de Hydra.
+  searchpath:
+    - file://${project_root:}/slurm
+  run: # meme nom qu'en sweep (voir pretrain.yaml)
+    dir: ${hydra.sweep.dir}/${hydra.sweep.subdir}
+  sweep:
+    dir: ${env.results_root}
+    # train_dir (hub.train_dir), arguments positionnels dans cet ordre : 1 choix du backbone,
+    # 2 backbone.run, 3 backbone_run (`forced` en Python), 4 backbone_data, 5 backbone_method,
+    # 6 task, 7 choix du neck, 8 choix de la tete, 9 neck_from, 10 numero du job (-m). Verifie par
+    # tests/test_configs.py (test_train_dir_from_config).
+    subdir: ${train_dir:${hydra.runtime.choices.backbone},${oc.select:backbone.run,""},${backbone_run},${backbone_data},${backbone_method},${task},${hydra.runtime.choices.neck},${hydra.runtime.choices.head},${neck_from},${oc.select:hydra.job.num,""}}

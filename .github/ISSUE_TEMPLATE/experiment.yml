@@ -21,7 +21,7 @@ body:
     id: budget
     attributes:
       label: Budget de calcul estimé
-      placeholder: 1 GPU × 14 h
+      placeholder: nombre de jobs × heures GPU par job
   - type: textarea
     id: runs
     attributes:

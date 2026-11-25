@@ -1,0 +1,17 @@
+# @package _global_
+# Baseline : ViT-S/8, LeJEPA, Imagenette 128px, 800 epochs, bf16. Reference de toutes les
+# autres experiences.
+#
+# Prerequis : lo data prepare imagenette
+#   lo pretrain experiment=vit_lejepa_imagenette launcher=long -m
+#
+# bf16 : exige un GPU Ampere ou plus recent (verifie au demarrage, run.py) ; launcher=long n'en
+# sert que.
+defaults:
+  - override /backbone: vit_s8
+  - override /data: imagenette
+
+experiment_name: vit_lejepa_imagenette
+
+method:
+  precision: bf16

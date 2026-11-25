@@ -1,0 +1,10 @@
+# ViT-S/8 a poids aleatoires : backbone de la baseline (exemple minimal LeJEPA).
+# 21,7M parametres ; 4 cartes au stride 8 (pas de pyramide).
+_target_: latentopt.models.backbones.archs.vit.TimmViT
+
+arch: vit_small_patch8_224 # architecture timm
+img_size: ${oc.select:data.img_size,128} # pre-entrainement : celle des donnees ; 128 sinon (tetes)
+embed_dim: 512 # projection apprise apres le pooling ; null = token CLS (384)
+blocks: [2, 5, 8, 11] # blocs exposes comme cartes de features (indices a partir de 0)
+drop_path_rate: 0.1
+grad_checkpointing: false # lo pretrain y ecrit env.grad_checkpointing, resolu (run.py)

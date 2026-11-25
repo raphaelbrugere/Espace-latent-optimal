@@ -8,8 +8,6 @@ __pycache__/
 .mypy_cache/
 
 # Données, poids, sorties (jamais dans git)
-/data/
-/datasets/
 *.ckpt
 *.pt
 *.pth
@@ -19,9 +17,22 @@ __pycache__/
 *.tflite
 outputs/
 multirun/
+/results/*
+!/results/.gitkeep
 lightning_logs/
-wandb/
-features/
+# MLflow : bases par run dans results/, base d'équipe data/mlflow.db (déjà ignorés).
+# `mlflow ui` lancé sans argument à la racine y crée mlflow.db (ou mlruns/) et mlartifacts/.
+/mlflow.db
+/mlruns/
+/mlartifacts/
+
+# data/ : seuls les trois sous-dossiers et leur .gitkeep sont suivis.
+/data/*
+!/data/datasets/
+!/data/features/
+!/data/models/
+/data/*/*
+!/data/*/.gitkeep
 
 # Documents
 *.pdf
